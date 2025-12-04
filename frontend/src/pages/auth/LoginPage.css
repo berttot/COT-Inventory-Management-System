@@ -1,0 +1,171 @@
+/* ===== Page Layout ===== */
+.login-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f9fbff 0%, #dbeafe 100%);
+  font-family: "Inter", sans-serif;
+}
+
+/* ===== Logo ===== */
+.login-logo {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 2px solid #e5e7eb;
+}
+
+/* ===== Titles ===== */
+.system-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #002879;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  color: #6b7280;
+  font-size: 1rem;
+  margin-bottom: 2.2rem;
+}
+
+/* ===== Login Card ===== */
+.login-card {
+  background-color: #ffffff;
+  padding: 2rem;
+  width: 380px;
+  border-radius: 20px;
+  box-shadow: 0px 8px 30px rgba(0, 40, 121, 0.15);
+  text-align: left;
+  animation: fadeIn 0.8s ease-in-out;
+}
+
+/* ===== Text ===== */
+.welcome-text {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 0.25rem;
+}
+
+.subtext {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ===== Inputs ===== */
+label {
+  display: block;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+input {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input:focus {
+  border-color: #002879;
+  box-shadow: 0 0 0 2px rgba(0, 40, 121, 0.2);
+}
+
+/* ===== Error Message ===== */
+.error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+/* ===== Button ===== */
+.login-btn {
+  width: 100%;
+  padding: 0.8rem;
+  border: none;
+  border-radius: 8px;
+  background-color: #2563eb; /* Vibrant blue like in the picture */
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.login-btn:hover {
+  background-color: #1e40af; /* Darker hover */
+  transform: translateY(-2px);
+}
+
+.login-btn.loading {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* ===== Animation ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 480px) {
+  .login-card {
+    width: 90%;
+    padding: 1.5rem;
+  }
+}
+
+
+
+/* === Password Field with Eye Icon === */
+.password-wrapper {
+  position: relative;
+}
+
+.password-wrapper input {
+  padding-right: 45px;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 40%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  user-select: none;
+}
+
+.eye-icon {
+  width: 22px;
+  height: 22px;
+  color: #6b7280;
+  transition: 0.2s;
+}
+
+.toggle-password:hover .eye-icon {
+  color: #111827;
+}
+
+
+
