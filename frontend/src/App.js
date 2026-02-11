@@ -30,40 +30,202 @@ import SuperAdminArchivedRecords from "./pages/super-admin/SuperAdminArchivedRec
 import SuperAdminSystemLogs from "./pages/super-admin/SuperAdminSystemLogs";
 import SuperAdminSettings from "./pages/super-admin/SuperAdminSettings";
 
+// Decide what to show at "/" based on auth state
+function AuthLanding() {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const role = typeof window !== "undefined" ? localStorage.getItem("role") : null;
+
+  if (token && role) {
+    if (role === "superadmin") return <Navigate to="/super-admin" replace />;
+    if (role === "departmentadmin") return <Navigate to="/department-admin" replace />;
+    if (role === "staff") return <Navigate to="/staff" replace />;
+  }
+
+  // Not logged in → show login
+  return <LoginPage />;
+}
+
+// Simple client-side guard based on login + role from localStorage
+function ProtectedRoute({ element, allowedRoles }) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const role = typeof window !== "undefined" ? localStorage.getItem("role") : null;
+
+  // Not logged in → always go back to login
+  if (!token || !role) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Logged in but wrong role for this area → bounce to their dashboard
+  if (allowedRoles && !allowedRoles.includes(role)) {
+    if (role === "superadmin") return <Navigate to="/super-admin" replace />;
+    if (role === "departmentadmin") return <Navigate to="/department-admin" replace />;
+    if (role === "staff") return <Navigate to="/staff" replace />;
+    return <Navigate to="/" replace />;
+  }
+
+  return element;
+}
+
 function App() {
   return (
     <Router>
       <Routes>
         {/* Auth */}
-        <Route path="/" element={<LoginPage />} />
+        <Route path="/" element={<AuthLanding />} />
         <Route path="/register" element={<Register />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* Staff */}
-        <Route path="/staff" element={<StaffDashboard />} />
-        <Route path="/staff/requests" element={<StaffRequestItems />} />
-        <Route path="/staff/history" element={<StaffHistory />} />
-        <Route path="/staff/settings" element={<StaffSettings />} />
+        {/* Staff (only for 'staff' role) */}
+        <Route
+          path="/staff"
+          element={<ProtectedRoute element={<StaffDashboard />} allowedRoles={["staff"]} />}
+        />
+        <Route
+          path="/staff/requests"
+          element={<ProtectedRoute element={<StaffRequestItems />} allowedRoles={["staff"]} />}
+        />
+        <Route
+          path="/staff/history"
+          element={<ProtectedRoute element={<StaffHistory />} allowedRoles={["staff"]} />}
+        />
+        <Route
+          path="/staff/settings"
+          element={<ProtectedRoute element={<StaffSettings />} allowedRoles={["staff"]} />}
+        />
 
-        {/* Department Admin */}
-        <Route path="/department-admin" element={<DepartmentAdminDashboard />} />
-        <Route path="/department-admin/users" element={<DepartmentAdminManageUsers />} />
-        <Route path="/department-admin/settings" element={<DepartmentAdminSettings />} />
-        <Route path="/department-admin/requests" element={<DepartmentAdminRequests />} />
-        <Route path="/department-admin/reports" element={<Navigate to="/department-admin/requests" replace />} />
-        <Route path="/department-admin/archived-users" element={<DepartmentAdminArchivedUsers />} />
+        {/* Department Admin (only for 'departmentadmin' role) */}
+        <Route
+          path="/department-admin"
+          element={
+            <ProtectedRoute
+              element={<DepartmentAdminDashboard />}
+              allowedRoles={["departmentadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/department-admin/users"
+          element={
+            <ProtectedRoute
+              element={<DepartmentAdminManageUsers />}
+              allowedRoles={["departmentadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/department-admin/settings"
+          element={
+            <ProtectedRoute
+              element={<DepartmentAdminSettings />}
+              allowedRoles={["departmentadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/department-admin/requests"
+          element={
+            <ProtectedRoute
+              element={<DepartmentAdminRequests />}
+              allowedRoles={["departmentadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/department-admin/reports"
+          element={
+            <ProtectedRoute
+              element={<Navigate to="/department-admin/requests" replace />}
+              allowedRoles={["departmentadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/department-admin/archived-users"
+          element={
+            <ProtectedRoute
+              element={<DepartmentAdminArchivedUsers />}
+              allowedRoles={["departmentadmin"]}
+            />
+          }
+        />
 
-        {/* Super Admin */}
-        <Route path="/super-admin" element={<SuperAdminDashboard />} />
-        <Route path="/super-admin/manage-users" element={<ManageUsers />} />
-        <Route path="/super-admin/requests" element={<SuperAdminRequests />} />
-        <Route path="/super-admin/reports" element={<Navigate to="/super-admin/requests" replace />} />
-        <Route path="/super-admin/manage-inventory" element={<SuperAdminManageInventory />} />
-        <Route path="/super-admin/calendar-alerts" element={<CalendarAlerts />} />
-        <Route path="/super-admin/archived-records" element={<SuperAdminArchivedRecords />} />
-        <Route path="/super-admin/system-logs" element={<SuperAdminSystemLogs />} />
-        <Route path="/super-admin/settings" element={<SuperAdminSettings />} />
+        {/* Super Admin (only for 'superadmin' role) */}
+        <Route
+          path="/super-admin"
+          element={
+            <ProtectedRoute
+              element={<SuperAdminDashboard />}
+              allowedRoles={["superadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/super-admin/manage-users"
+          element={
+            <ProtectedRoute element={<ManageUsers />} allowedRoles={["superadmin"]} />
+          }
+        />
+        <Route
+          path="/super-admin/requests"
+          element={
+            <ProtectedRoute
+              element={<SuperAdminRequests />}
+              allowedRoles={["superadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/super-admin/reports"
+          element={
+            <ProtectedRoute
+              element={<Navigate to="/super-admin/requests" replace />}
+              allowedRoles={["superadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/super-admin/manage-inventory"
+          element={
+            <ProtectedRoute
+              element={<SuperAdminManageInventory />}
+              allowedRoles={["superadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/super-admin/calendar-alerts"
+          element={
+            <ProtectedRoute element={<CalendarAlerts />} allowedRoles={["superadmin"]} />
+          }
+        />
+        <Route
+          path="/super-admin/archived-records"
+          element={
+            <ProtectedRoute
+              element={<SuperAdminArchivedRecords />}
+              allowedRoles={["superadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/super-admin/system-logs"
+          element={
+            <ProtectedRoute
+              element={<SuperAdminSystemLogs />}
+              allowedRoles={["superadmin"]}
+            />
+          }
+        />
+        <Route
+          path="/super-admin/settings"
+          element={
+            <ProtectedRoute
+              element={<SuperAdminSettings />}
+              allowedRoles={["superadmin"]}
+            />
+          }
+        />
       </Routes>
     </Router>
   );
