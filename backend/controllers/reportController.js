@@ -1,9 +1,11 @@
 import fs from "fs";
 import path from "path";
-import fetch from "node-fetch";
+import crypto from "crypto";
+import QRCode from "qrcode";
 import PdfPrinter from "pdfmake";
 import Request from "../models/RequestModel.js";
 import asyncHandler from "../middleware/asyncHandler.js";
+import { generateSignatureImage } from "../utils/signatureUtils.js";
 
 const printer = new PdfPrinter({
   Arial: {
@@ -14,42 +16,12 @@ const printer = new PdfPrinter({
   },
 });
 
-const getChartImageBase64 = async (itemCount) => {
-  const chartConfig = {
-    type: "bar",
-    data: {
-      labels: Object.keys(itemCount),
-      datasets: [
-        {
-          label: "Most Requested Items",
-          data: Object.values(itemCount),
-          backgroundColor: "rgba(54,162,235,0.7)",
-        },
-      ],
-    },
-    options: {
-      plugins: {
-        legend: { display: false },
-        title: { display: true, text: "Points scored" },
-      },
-      scales: { y: { beginAtZero: true } },
-    },
-  };
-
-  const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(
-    JSON.stringify(chartConfig)
-  )}&format=png&width=700&height=400`;
-
-  const response = await fetch(chartUrl);
-  const buffer = await response.arrayBuffer();
-  return `data:image/png;base64,${Buffer.from(buffer).toString("base64")}`;
-};
+const logoPath = path.resolve("./image/buksulogo.png");
 
 export const generateDepartmentReport = asyncHandler(async (req, res) => {
   const { department } = req.params;
   const { month, year } = req.query;
 
-  const logoPath = path.resolve("./image/buksulogo.png");
   const now = new Date();
   const targetYear = year ? parseInt(year, 10) : now.getFullYear();
   const targetMonth = month ? parseInt(month, 10) - 1 : now.getMonth();
@@ -63,40 +35,194 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
 
   if (requests.length === 0) {
     res.status(404);
-    throw new Error("No requests found for this period.");
+    throw new Error("No data found for this period.");
   }
 
-  const tableBody = [
+  // For this report, "transactions" means completed/posted issuances only.
+  const transactions = requests.filter((r) => r.status === "Successful");
+  if (transactions.length === 0) {
+    res.status(404);
+    throw new Error("No completed transactions found for this period.");
+  }
+
+  const totalTransactions = transactions.length;
+  const totalQtyIssued = transactions.reduce(
+    (sum, r) => sum + (Number(r.quantity) || 0),
+    0
+  );
+
+  const uniqueRequesters = new Set(
+    transactions.map((r) => r.requestedBy).filter(Boolean)
+  );
+
+  const issuedByItem = {};
+  transactions.forEach((r) => {
+    const item = r.itemName || "Unknown";
+    issuedByItem[item] = (issuedByItem[item] || 0) + (Number(r.quantity) || 0);
+  });
+  const topItems = Object.entries(issuedByItem)
+    .map(([itemName, qtyIssued]) => ({ itemName, qtyIssued }))
+    .sort((a, b) => b.qtyIssued - a.qtyIssued)
+    .slice(0, 8);
+
+  const shortId = (id) => {
+    const s = String(id || "");
+    return s.length > 6 ? s.slice(-6).toUpperCase() : s.toUpperCase();
+  };
+
+  // --- Scannable verification (QR + SHA-256 hash) ---
+  const fingerprintLines = transactions.map((r) => {
+    const id = String(r._id || "");
+    const ts = new Date(r.requestedAt || r.createdAt || 0).toISOString();
+    const by = String(r.requestedBy || "");
+    const item = String(r.itemName || "");
+    const qty = String(Number(r.quantity) || 0);
+    return `${id}|${ts}|${department}|${by}|${item}|${qty}`;
+  });
+  const fingerprint = fingerprintLines.join("\n");
+  const verificationHash = crypto
+    .createHash("sha256")
+    .update(fingerprint)
+    .digest("hex");
+
+  const generatedLabel = now.toLocaleString("en-PH");
+  const reportMonthLabel = (targetMonth + 1).toString().padStart(2, "0");
+  const reportLabel = `${month || reportMonthLabel}/${year || targetYear}`;
+
+  const qrPayload = {
+    system: "COT Inventory System",
+    reportType: "Department Transaction History",
+    department,
+    period: {
+      month: Number(month || targetMonth + 1),
+      year: Number(year || targetYear),
+      start: start.toISOString(),
+      end: end.toISOString(),
+    },
+    totals: {
+      transactions: totalTransactions,
+      quantityIssued: totalQtyIssued,
+    },
+    generatedAt: now.toISOString(),
+    generatedBy: req.user?.name || "Department Admin",
+    sha256: verificationHash,
+  };
+
+  let qrDataUrl = null;
+  try {
+    qrDataUrl = await QRCode.toDataURL(JSON.stringify(qrPayload), {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 240,
+      color: {
+        dark: "#0a2a66",
+        light: "#00000000",
+      },
+    });
+  } catch (e) {
+    console.warn("QR generation failed:", e?.message || e);
+  }
+
+  const summaryTableBody = [
+    [{ text: "Metric", bold: true }, { text: "Value", bold: true }],
+    ["Department", department],
+    ["Total transactions", String(totalTransactions)],
+    ["Total quantity issued", String(totalQtyIssued)],
+    ["Unique requesters", String(uniqueRequesters.size)],
+  ];
+
+  const topItemsTableBody = [
+    [{ text: "Top items by quantity issued", bold: true }, { text: "Qty issued", bold: true }],
+    ...(topItems.length
+      ? topItems.map((i) => [i.itemName, String(i.qtyIssued)])
+      : [["—", "0"]]),
+  ];
+
+  const transactionsTableBody = [
     [
-      { text: "Requested By", bold: true },
+      { text: "Transaction ID", bold: true },
+      { text: "Date & time", bold: true },
+      { text: "Type", bold: true },
+      { text: "Requested by", bold: true },
       { text: "Item", bold: true },
-      { text: "Quantity", bold: true },
-      { text: "Date", bold: true },
+      { text: "Qty", bold: true, alignment: "right" },
       { text: "Status", bold: true },
     ],
   ];
 
-  requests.forEach((request) => {
-    tableBody.push([
-      request.requestedBy,
-      request.itemName,
-      request.quantity.toString(),
-      new Date(request.requestedAt).toLocaleDateString("en-PH"),
-      request.status,
+  transactions.forEach((r) => {
+    transactionsTableBody.push([
+      { text: shortId(r._id), fontSize: 8 },
+      { text: new Date(r.requestedAt || r.createdAt).toLocaleString("en-PH"), fontSize: 8 },
+      { text: "Issue (request)", fontSize: 8 },
+      { text: r.requestedBy || "—", fontSize: 8 },
+      { text: r.itemName || "—", fontSize: 8 },
+      { text: String(r.quantity ?? "—"), fontSize: 8, alignment: "right" },
+      { text: "Posted", fontSize: 8, color: "#047857" },
     ]);
   });
 
-  const itemCount = {};
-  requests.forEach((request) => {
-    if (request.status === "Successful") {
-      itemCount[request.itemName] = (itemCount[request.itemName] || 0) + Number(request.quantity);
-    }
-  });
+  // Get logged-in user's name for "Prepared by" section
+  const preparedByName = req.user?.name || "Department Admin";
+  
+  // Fixed names for other sections
+  const superAdminName = "Mylaflor T. Mansaladez";
+  const deanName = "Dr. Marilou O. Espina";
 
-  const chartBase64 = await getChartImageBase64(itemCount);
+  // Generate signature images
+  const preparedBySignature = generateSignatureImage(preparedByName);
+  const superAdminSignature = generateSignatureImage(superAdminName);
+  const deanSignature = generateSignatureImage(deanName);
 
   const docDefinition = {
-    pageMargins: [40, 60, 40, 60],
+    pageOrientation: "landscape",
+    pageMargins: [40, 80, 40, 60],
+    header: (currentPage, pageCount) => ({
+      columns: [
+        {
+          text: "COT Inventory System",
+          fontSize: 9,
+          bold: true,
+          color: "#0a2a66",
+        },
+        {
+          text: `Department Transaction History Report - ${department}`,
+          fontSize: 9,
+          bold: true,
+          alignment: "center",
+          color: "#0a2a66",
+        },
+        {
+          text: currentPage === 1 ? generatedLabel : `Page ${currentPage} of ${pageCount}`,
+          fontSize: 8,
+          alignment: "right",
+          color: "#666",
+        },
+      ],
+      margin: [40, 20, 40, 10],
+    }),
+    footer: (currentPage, pageCount) => ({
+      columns: [
+        {
+          text: "For internal use only. College of Technology.",
+          fontSize: 7,
+          color: "#888",
+        },
+        {
+          text: `Page ${currentPage} of ${pageCount}`,
+          fontSize: 8,
+          alignment: "center",
+          color: "#666",
+        },
+        {
+          text: `Total transactions: ${totalTransactions}`,
+          fontSize: 7,
+          alignment: "right",
+          color: "#888",
+        },
+      ],
+      margin: [40, 8, 40, 15],
+    }),
     content: [
       {
         columns: [
@@ -112,7 +238,7 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
         ],
       },
       {
-        text: "\nMONTHLY INVENTORY REPORT",
+        text: "\nTRANSACTION HISTORY REPORT",
         alignment: "center",
         bold: true,
         fontSize: 14,
@@ -121,28 +247,79 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
         margin: [0, 10, 0, 10],
       },
       {
-        text: `Inclusive Dates: ${start.toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })} - ${end.toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}\nName of Office: COT - ${department} Department`,
-        margin: [0, 0, 0, 15],
+        columns: [
+          {
+            width: "*",
+            stack: [
+              {
+                text: `Inclusive Dates: ${start.toLocaleDateString("en-PH")} - ${end.toLocaleDateString(
+                  "en-PH"
+                )}\nOffice/Department: COT - ${department} Department\nPeriod: ${reportLabel} | Generated: ${generatedLabel}`,
+                alignment: "left",
+              },
+              {
+                text: `Verification Hash: ${verificationHash.slice(0, 16).toUpperCase()}`,
+                fontSize: 9,
+                color: "#333",
+                margin: [0, 6, 0, 0],
+              },
+              {
+                text: "Scan the QR code to view full verification payload.",
+                fontSize: 8,
+                color: "#555",
+                margin: [0, 2, 0, 0],
+              },
+            ],
+          },
+          {
+            width: 140,
+            stack: [
+              ...(qrDataUrl ? [{ image: qrDataUrl, width: 120, alignment: "right" }] : []),
+            ],
+          },
+        ],
+        columnGap: 10,
+        margin: [0, 0, 0, 12],
       },
       {
-        text: "Transaction and Reports:",
-        style: "subheader",
-        margin: [0, 0, 0, 8],
+        text: "Summary",
+        style: "sectionHeader",
+        margin: [0, 0, 0, 6],
+      },
+      {
+        columns: [
+          {
+            width: "*",
+            table: { headerRows: 1, widths: ["*", "auto"], body: summaryTableBody },
+            layout: "lightHorizontalLines",
+          },
+          {
+            width: "*",
+            table: { headerRows: 1, widths: ["*", "auto"], body: topItemsTableBody },
+            layout: "lightHorizontalLines",
+          },
+        ],
+        columnGap: 10,
+        margin: [0, 0, 0, 12],
+      },
+      {
+        text: "Transaction list (chronological)",
+        style: "sectionHeader",
+        margin: [0, 10, 0, 6],
       },
       {
         table: {
           headerRows: 1,
-          widths: ["*", "*", 60, 70, 80],
-          body: tableBody,
+          widths: [90, 130, 90, 140, "*", 55, 80],
+          body: transactionsTableBody,
         },
         layout: "lightHorizontalLines",
       },
-      { text: "\nSummary of most requested items in bar graph", bold: true, margin: [0, 10, 0, 10] },
       {
-        image: chartBase64,
-        width: 450,
-        alignment: "center",
-        margin: [0, 0, 0, 20],
+        text: "\nNotes:\n- This report includes completed/posted transactions only (stock issuances for this department).\n- Restocks and manual adjustments (if any) are tracked separately via inventory updates/system logs.",
+        fontSize: 9,
+        color: "#444",
+        margin: [0, 10, 0, 0],
       },
       { text: "", pageBreak: "after" },
       {
@@ -158,34 +335,93 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
           },
         ],
       },
-      { text: "\nAnalysis/Description of the results (3-5 sentences will do).", bold: true, margin: [0, 20, 0, 10] },
-      { text: "_____________________________________________________________\n".repeat(3), margin: [0, 0, 0, 40] },
-      { text: "\n\n\n\n\n\n\n\n\n\n\n\n\n\nPrepared by:\n\n", bold: true, margin: [0, 0, 0, 5] },
-      { text: "__________________________", margin: [0, 0, 0, 5] },
-      { text: `Departmental Admin - ${department}` },
-      { text: "\nChecked by:\n\n", bold: true, margin: [0, 20, 0, 5] },
-      { text: "__________________________", margin: [0, 0, 0, 5] },
-      { text: "Super Admin - College of Technology" },
-      { text: "\nApproved by:\n\n", bold: true, margin: [0, 20, 0, 5] },
-      { text: "__________________________", margin: [0, 0, 0, 5] },
-      { text: "Dean/Head - College of Technology" },
+      { text: "\nAnalysis/Remarks (3–5 sentences):", bold: true, margin: [0, 20, 0, 10] },
+      { text: "_____________________________________________________________\n".repeat(4), margin: [0, 0, 0, 50] },
+      {
+        stack: [
+          { text: "Prepared by:", bold: true, margin: [0, 0, 0, 12] },
+          ...(preparedBySignature ? [{ image: preparedBySignature, width: 160, alignment: "left", margin: [0, 0, 0, 6] }] : []),
+          { text: preparedByName, alignment: "left", margin: [0, 0, 0, 5] },
+          { text: `Departmental Admin - ${department}`, fontSize: 9, alignment: "left", margin: [0, 0, 0, 0] },
+        ],
+        margin: [0, 0, 0, 35],
+      },
+      {
+        stack: [
+          { text: "Checked by:", bold: true, margin: [0, 0, 0, 12] },
+          ...(superAdminSignature ? [{ image: superAdminSignature, width: 160, alignment: "left", margin: [0, 0, 0, 6] }] : []),
+          { text: superAdminName, alignment: "left", margin: [0, 0, 0, 5] },
+          { text: "Super Admin - College of Technology", fontSize: 9, alignment: "left", margin: [0, 0, 0, 0] },
+        ],
+        margin: [0, 0, 0, 35],
+      },
+      {
+        stack: [
+          { text: "Approved by:", bold: true, margin: [0, 0, 0, 12] },
+          ...(deanSignature ? [{ image: deanSignature, width: 160, alignment: "left", margin: [0, 0, 0, 6] }] : []),
+          { text: deanName, alignment: "left", margin: [0, 0, 0, 5] },
+          { text: "Dean/Head - College of Technology", fontSize: 9, alignment: "left", margin: [0, 0, 0, 0] },
+        ],
+        margin: [0, 0, 0, 0],
+      },
     ],
     styles: {
       subheader: { fontSize: 12, bold: true },
+      sectionHeader: { fontSize: 13, bold: true, margin: [0, 14, 0, 8] },
     },
     defaultStyle: { font: "Arial", fontSize: 10 },
   };
 
-  const pdfDoc = printer.createPdfKitDocument(docDefinition);
-  const reportsDir = "./reports";
-  fs.mkdirSync(reportsDir, { recursive: true });
-  const filePath = path.resolve(`${reportsDir}/${department}_report_${month || targetMonth + 1}_${year || targetYear}.pdf`);
-  const stream = fs.createWriteStream(filePath);
-  pdfDoc.pipe(stream);
-  pdfDoc.end();
-
-  stream.on("finish", () => {
-    res.download(filePath);
-  });
+  try {
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+    const reportsDir = "./reports";
+    fs.mkdirSync(reportsDir, { recursive: true });
+    const filePath = path.resolve(
+      `${reportsDir}/Transaction_History_${department}_${month || targetMonth + 1}_${year || targetYear}.pdf`
+    );
+    const stream = fs.createWriteStream(filePath);
+    
+    pdfDoc.pipe(stream);
+    
+    pdfDoc.on("error", (error) => {
+      console.error("PDF generation error:", error);
+      stream.destroy();
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (unlinkError) {
+        console.error("Error deleting file:", unlinkError);
+      }
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to generate PDF: " + error.message });
+      }
+    });
+    
+    stream.on("error", (error) => {
+      console.error("Stream error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to write PDF file: " + error.message });
+      }
+    });
+    
+    stream.on("finish", () => {
+      if (!res.headersSent) {
+        res.download(filePath, (err) => {
+          if (err) {
+            console.error("Download error:", err);
+            if (!res.headersSent) {
+              res.status(500).json({ message: "Failed to download PDF: " + err.message });
+            }
+          }
+        });
+      }
+    });
+    
+    pdfDoc.end();
+  } catch (error) {
+    console.error("Error creating PDF document:", error);
+    res.status(500).json({ message: "Failed to generate report: " + error.message });
+  }
 });
 

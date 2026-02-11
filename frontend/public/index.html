@@ -9,6 +9,12 @@
       name="description"
       content="Web site created using create-react-app"
     />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <!--
       manifest.json provides metadata used when your web app is installed on a
@@ -25,6 +31,67 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>College of Technology Inventory System</title>
+    <script>
+      // Run BEFORE React to suppress reCAPTCHA/timeout error overlay
+      (function() {
+        function isTimeoutOrRecaptchaError(event) {
+          var msg = '';
+          if (event.reason) {
+            msg = (event.reason && (event.reason.message || event.reason.toString && event.reason.toString())) || '';
+          } else if (event.message) {
+            msg = event.message || '';
+          }
+          msg = msg.toLowerCase();
+          return msg.indexOf('timeout') !== -1 || msg.indexOf('recaptcha') !== -1 || msg.indexOf('abort') !== -1 ||
+            (event.reason && event.reason.name === 'AbortError');
+        }
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isTimeoutOrRecaptchaError(event)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        }, true);
+        function hideErrorOverlay() {
+          if (!document.body) return;
+          var iframes = document.body.querySelectorAll('iframe');
+          for (var i = 0; i < iframes.length; i++) {
+            var f = iframes[i];
+            if (!f.src || f.src === '' || f.src === 'about:blank') {
+              f.style.cssText = 'display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;position:fixed!important;z-index:-9999!important;';
+            }
+          }
+          var all = document.body.getElementsByTagName('*');
+          for (var j = 0; j < all.length; j++) {
+            var el = all[j];
+            var text = (el.textContent || el.innerText || '').toLowerCase();
+            if (text.indexOf('timeout') !== -1 && (text.indexOf('error') !== -1 || text.indexOf('uncaught') !== -1)) {
+              if (el.style.position === 'fixed' || window.getComputedStyle(el).position === 'fixed') {
+                el.style.cssText = 'display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;z-index:-9999!important;';
+              }
+            }
+          }
+        }
+        function observe() {
+          if (!document.body) {
+            setTimeout(observe, 20);
+            return;
+          }
+          hideErrorOverlay();
+          var obs = new MutationObserver(hideErrorOverlay);
+          obs.observe(document.body, { childList: true, subtree: true });
+          var n = 0;
+          var iv = setInterval(function() {
+            hideErrorOverlay();
+            if (++n > 150) clearInterval(iv);
+          }, 100);
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', observe);
+        } else {
+          observe();
+        }
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

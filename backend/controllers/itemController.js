@@ -5,6 +5,7 @@ import {
   maybeCreateLowStockEvent,
   maybeCreateRestockEvent,
 } from "../utils/stockAlerts.js";
+import { emitStockAlerts } from "../utils/socketService.js";
 import asyncHandler from "../middleware/asyncHandler.js";
 
 export const getItems = asyncHandler(async (req, res) => {
@@ -47,6 +48,7 @@ export const createItem = asyncHandler(async (req, res) => {
     status: computeStatus(qty),
   });
 
+  await emitStockAlerts();
   res.status(201).json(newItem);
 });
 
@@ -90,6 +92,7 @@ export const updateItem = asyncHandler(async (req, res) => {
     await maybeCreateRestockEvent(item, prevQty, updates.quantity);
   }
 
+  await emitStockAlerts();
   res.json(updated);
 });
 
@@ -125,6 +128,7 @@ export const restockItem = asyncHandler(async (req, res) => {
   await maybeCreateLowStockEvent(item, prevQty, item.quantity);
   await maybeCreateRestockEvent(item, prevQty, item.quantity);
 
+  await emitStockAlerts();
   res.json(item);
 });
 
@@ -146,6 +150,7 @@ export const archiveItem = asyncHandler(async (req, res) => {
     throw new Error("Item not found");
   }
 
+  await emitStockAlerts();
   res.json({ message: "Item archived", item: updated });
 });
 
@@ -167,6 +172,7 @@ export const unarchiveItem = asyncHandler(async (req, res) => {
     throw new Error("Item not found");
   }
 
+  await emitStockAlerts();
   res.json({ message: "Item restored", item: updated });
 });
 

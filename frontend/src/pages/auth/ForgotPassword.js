@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import AuthShell from "../../components/AuthShell";
+import { API_URL } from "../../config/api";
 
 function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -11,7 +14,7 @@ function ForgotPassword() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:5000/api/users/forgot-password", {
+      const response = await fetch(`${API_URL}/users/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -32,59 +35,65 @@ function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex justify-center items-center bg-gradient-to-br from-blue-100 via-white to-blue-50">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md border border-gray-100"
-      >
-        <h2 className="text-3xl font-bold mb-3 text-center text-blue-700">
-          Forgot Password
-        </h2>
-        <p className="text-sm text-gray-500 text-center mb-6">
-          Enter your registered email, and we’ll send you a reset link.
-        </p>
-
-        <div className="mb-5">
-          <label className="block text-gray-700 font-medium mb-1">
-            Email Address
+    <AuthShell
+      title="Forgot password"
+      subtitle="Enter your registered email and we’ll send you a reset link."
+      footer={
+        <div className="flex items-center justify-center gap-2">
+          <span>Remembered it?</span>
+          <Link
+            to="/"
+            className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+          >
+            Back to login
+          </Link>
+        </div>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label
+            htmlFor="email"
+            className="auth-label"
+          >
+            Email address
           </label>
           <input
+            id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Enter your email"
             required
-            className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none"
+            autoComplete="email"
+            className="auth-input"
           />
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className={`w-full py-3 rounded-lg font-semibold text-white transition-all duration-300 ${
-            loading
-              ? "bg-blue-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700 shadow-md"
-          }`}
+          className="auth-primary-btn"
         >
-          {loading ? "Sending..." : "Send Reset Link"}
+          {loading ? "Sending..." : "Send reset link"}
         </button>
 
         {message && (
-          <p
-            className={`mt-5 text-center text-sm ${
+          <div
+            role="status"
+            className={`rounded-2xl px-4 py-3 text-sm ${
               message.includes("✅")
-                ? "text-green-600"
+                ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
                 : message.includes("❌")
-                ? "text-red-600"
-                : "text-yellow-600"
+                ? "border border-red-200 bg-red-50 text-red-800"
+                : "border border-amber-200 bg-amber-50 text-amber-800"
             }`}
           >
             {message}
-          </p>
+          </div>
         )}
       </form>
-    </div>
+    </AuthShell>
   );
 }
 

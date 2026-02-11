@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
+import { API_URL } from "../../config/api";
 import {
   Home,
   ClipboardList,
@@ -10,9 +11,18 @@ import {
   User,
   Settings,
   PlusCircle,
+  Package,
+  ArrowRight,
+  TrendingUp,
 } from "lucide-react";
-// import WeatherCard from "../../components/WeatherCard";
-
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 const StaffDashboard = () => {
   const navigate = useNavigate();
@@ -25,8 +35,18 @@ const StaffDashboard = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalRequests, setTotalRequests] = useState(0);
 
+  const [recentRequests, setRecentRequests] = useState([]);
   const [userId, setUserId] = useState("");
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Time-based greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  };
 
   // Logout Handler
   const handleLogout = async () => {
@@ -35,7 +55,7 @@ const StaffDashboard = () => {
 
     try {
       const token = localStorage.getItem("token");
-      await fetch("http://localhost:5000/api/logs/logout", {
+      await fetch(`${API_URL}/logs/logout`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -65,40 +85,61 @@ const StaffDashboard = () => {
     }
   }, []);
 
-  // Fetch user request summary
+  const [chartData, setChartData] = useState([]);
+
+  // Fetch total items and staff requests (recent list, chart data, and this year's count)
   useEffect(() => {
-    if (!userId) return;
-
-    const fetchStaffSummary = async () => {
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const res = await fetch(
-          `http://localhost:5000/api/requests/staff-summary/${userId}`
-        );
-        const data = await res.json();
+        const [summaryRes, staffReqsRes] = await Promise.all([
+          fetch(`${API_URL}/requests/summary`),
+          userId ? fetch(`${API_URL}/requests/staff/${userId}`) : Promise.resolve(null),
+        ]);
 
-        setTotalRequests(data.total || 0);
-      } catch (err) {
-        console.error("Error fetching staff request summary:", err);
-      }
-    };
-
-    fetchStaffSummary();
-  }, [userId]);
-
-  // Fetch total items
-  useEffect(() => {
-    const fetchRequestStats = async () => {
-      try {
-        const summaryRes = await fetch("http://localhost:5000/api/requests/summary");
         const summaryData = await summaryRes.json();
         setTotalItems(summaryData.totalItems || 0);
+
+        if (staffReqsRes && staffReqsRes.ok) {
+          const staffReqs = await staffReqsRes.json();
+          const list = Array.isArray(staffReqs) ? staffReqs : [];
+          setRecentRequests(list.slice(0, 5));
+
+          const year = new Date().getFullYear();
+          const thisYearCount = list.filter((r) => {
+            const d = r.requestedAt ? new Date(r.requestedAt) : r.createdAt ? new Date(r.createdAt) : null;
+            return d && d.getFullYear() === year;
+          }).length;
+          setTotalRequests(thisYearCount);
+
+          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          const byMonth = months.map((label) => ({ month: label, requests: 0 }));
+          list.forEach((r) => {
+            const d = r.requestedAt ? new Date(r.requestedAt) : r.createdAt ? new Date(r.createdAt) : null;
+            if (d && d.getFullYear() === year) {
+              const idx = d.getMonth();
+              if (byMonth[idx]) byMonth[idx].requests += 1;
+            }
+          });
+          setChartData(byMonth);
+        }
       } catch (err) {
-        console.error("Error fetching request stats:", err);
+        console.error("Error fetching dashboard data:", err);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchRequestStats();
-  }, []);
+    if (userId) {
+      fetchData();
+    } else {
+      fetch(`${API_URL}/requests/summary`)
+        .then((r) => r.json())
+        .then((d) => setTotalItems(d.totalItems || 0))
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    }
+  }, [userId]);
 
   const getLinkClass = (path) =>
     `flex items-center gap-2 px-3 py-2 rounded-lg transition ${
@@ -107,9 +148,14 @@ const StaffDashboard = () => {
         : "text-white hover:bg-white/10"
     }`;
 
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "—";
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+
   return (
     <div className="flex h-screen bg-gray-100 text-gray-900">
-      
       {/* Sidebar */}
       <aside className="w-64 bg-[#002B7F] text-white flex flex-col justify-between shadow-lg">
         <div className="p-6">
@@ -176,25 +222,29 @@ const StaffDashboard = () => {
 
       {/* Main Content */}
       <main className="flex-1 p-8 overflow-y-auto">
-        <div className="flex justify-between items-center mb-8">
+        {/* Welcome header with gradient accent */}
+        <div className="flex justify-between items-start mb-8">
           <div>
+            <p className="text-sm font-medium text-[#0a2a66]/80 uppercase tracking-wide mb-1">
+              {getGreeting()}
+            </p>
             <h1 className="text-3xl font-bold text-[#0a2a66]">
               Welcome back, {userName || "User"}!
             </h1>
-            <p className="text-gray-600">
-              Manage your requests and track their progress easily
+            <p className="text-gray-600 mt-1">
+              Manage your requests and track their progress
             </p>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate("/staff/requests")}
-              className="flex items-center gap-2 bg-[#0a2a66] text-white px-4 py-2 rounded-lg hover:bg-[#0b347a] transition shadow-md"
+              className="flex items-center gap-2 bg-[#0a2a66] text-white px-4 py-2.5 rounded-xl hover:bg-[#0b347a] transition shadow-md hover:shadow-lg"
             >
               <PlusCircle size={18} /> Make Request
             </button>
             <button
               onClick={() => navigate("/staff/history")}
-              className="flex items-center gap-2 bg-[#f97316] text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition shadow-md"
+              className="flex items-center gap-2 bg-[#f97316] text-white px-4 py-2.5 rounded-xl hover:bg-orange-600 transition shadow-md hover:shadow-lg"
             >
               <History size={18} /> View History
             </button>
@@ -202,21 +252,138 @@ const StaffDashboard = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-4 gap-6 mb-8">
-          {/* Total Items */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-2xl shadow-md p-5 border-l-4 border-[#0a2a66] hover:shadow-lg transition">
-            <h2 className="text-gray-500 text-sm">Total Items</h2>
-            <p className="text-3xl font-bold mt-2 text-[#0a2a66]">{totalItems}</p>
-            <p className="text-sm text-gray-400">All items in inventory</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-gray-500 text-sm font-medium">Total Items</h2>
+                <p className="text-3xl font-bold mt-2 text-[#0a2a66]">{totalItems}</p>
+                <p className="text-sm text-gray-400 mt-1">Available in inventory</p>
+              </div>
+              <div className="p-3 rounded-xl bg-[#0a2a66]/10">
+                <Package className="text-[#0a2a66]" size={24} />
+              </div>
+            </div>
           </div>
 
-          {/* Total Requests */}
-          <div className="bg-white rounded-2xl shadow-md p-5 border-l-4 border-orange-500 hover:shadow-lg transition">
-            <h2 className="text-gray-500 text-sm">Total Requests</h2>
-            <p className="text-3xl font-bold mt-2 text-orange-500">{totalRequests}</p>
-            <p className="text-sm text-gray-400">Overall requests made</p>
+          <div className="bg-white rounded-2xl shadow-md p-5 border-l-4 border-[#f97316] hover:shadow-lg transition">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-gray-500 text-sm font-medium">Total Requests</h2>
+                <p className="text-3xl font-bold mt-2 text-[#f97316]">{totalRequests}</p>
+                <p className="text-sm text-gray-400 mt-1">This year</p>
+              </div>
+              <div className="p-3 rounded-xl bg-[#f97316]/10">
+                <ClipboardList className="text-[#f97316]" size={24} />
+              </div>
+            </div>
           </div>
-          {/* <WeatherCard /> */}
+        </div>
+
+        {/* Chart + Quick actions row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* My requests this year - chart */}
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-md p-6 hover:shadow-lg transition">
+            <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+              <TrendingUp className="text-[#0a2a66]" size={18} />
+              My Requests This Year
+            </h2>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={chartData}>
+                <XAxis dataKey="month" />
+                <YAxis allowDecimals={false} />
+                <Tooltip
+                  formatter={(value) => [`${value} requests`, "Requests"]}
+                  contentStyle={{ borderRadius: "8px" }}
+                />
+                <Bar dataKey="requests" fill="#0a2a66" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Quick actions */}
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <ClipboardList className="text-[#0a2a66]" size={18} />
+              Quick Actions
+            </h2>
+            <Link
+              to="/staff/requests"
+              className="block bg-white rounded-2xl shadow-md p-5 border-t-4 border-[#0a2a66] hover:shadow-lg transition group"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-[#0a2a66]/10 group-hover:bg-[#0a2a66]/20 transition">
+                    <PlusCircle className="text-[#0a2a66]" size={22} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800">Make a Request</h3>
+                    <p className="text-sm text-gray-500">Request items from inventory</p>
+                  </div>
+                </div>
+                <ArrowRight className="text-gray-400 group-hover:text-[#0a2a66] transition" size={20} />
+              </div>
+            </Link>
+            <Link
+              to="/staff/history"
+              className="block bg-white rounded-2xl shadow-md p-5 border-t-4 border-[#f97316] hover:shadow-lg transition group"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-[#f97316]/10 group-hover:bg-[#f97316]/20 transition">
+                    <History className="text-[#f97316]" size={22} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800">View History</h3>
+                    <p className="text-sm text-gray-500">See all your past requests</p>
+                  </div>
+                </div>
+                <ArrowRight className="text-gray-400 group-hover:text-[#f97316] transition" size={20} />
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* Recent requests */}
+        <div className="bg-white rounded-2xl shadow-md p-6 hover:shadow-lg transition">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <History className="text-[#0a2a66]" size={18} />
+              Recent Requests
+            </h2>
+            <Link
+              to="/staff/history"
+              className="text-sm font-medium text-[#0a2a66] hover:underline flex items-center gap-1"
+            >
+              View all <ArrowRight size={14} />
+            </Link>
+          </div>
+          {loading ? (
+            <p className="text-gray-500 text-sm py-4">Loading...</p>
+          ) : recentRequests.length === 0 ? (
+            <p className="text-gray-500 text-sm py-4">No requests yet. Make your first request from Request Items.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-200">
+                    <th className="pb-3 font-medium">Item</th>
+                    <th className="pb-3 font-medium">Quantity</th>
+                    <th className="pb-3 font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentRequests.map((req) => (
+                    <tr key={req._id} className="border-b border-gray-100 hover:bg-gray-50/80">
+                      <td className="py-3 font-medium text-gray-800">{req.itemName || "—"}</td>
+                      <td className="py-3 text-gray-600">{req.quantity ?? "—"}</td>
+                      <td className="py-3 text-gray-600">{formatDate(req.requestedAt || req.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </main>
     </div>

@@ -2,8 +2,146 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens (matches main app palette) */
+:root {
+  --cot-primary: #0a2a66;
+  --cot-primary-hover: #0b347a;
+  --cot-accent: #f97316;
+  --cot-surface: #f9fbff;
+}
+
 /* Optional: Custom scrollbar or font styling */
 body {
   font-family: 'Inter', sans-serif;
   background-color: #f8fafc;
+}
+
+@layer components {
+  /* Auth pages (modern + minimal, theme-matched) */
+  .auth-label {
+    @apply block text-sm font-medium text-slate-700;
+  }
+
+  .auth-input {
+    @apply mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400;
+    @apply focus:border-[color:var(--cot-primary)] focus:ring-4 focus:ring-[color:rgba(10,42,102,0.14)];
+  }
+
+  .auth-input-error {
+    @apply border-red-300 bg-red-50/40;
+  }
+
+  .auth-primary-btn {
+    @apply w-full rounded-2xl py-3 font-semibold text-white shadow-sm transition;
+    @apply bg-[color:var(--cot-primary)] hover:bg-[color:var(--cot-primary-hover)];
+    @apply focus:outline-none focus:ring-4 focus:ring-[color:rgba(10,42,102,0.14)];
+    @apply disabled:cursor-not-allowed disabled:opacity-70;
+  }
+
+  .auth-icon-btn {
+    @apply absolute inset-y-0 right-2 my-1 inline-flex items-center justify-center rounded-xl px-2 text-slate-500 transition;
+    @apply hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-[color:rgba(10,42,102,0.25)];
+  }
+
+  /* Settings pages (modern + minimal, theme-matched) */
+  .settings-shell {
+    @apply relative min-h-screen overflow-hidden bg-[color:var(--cot-surface)] text-slate-900;
+  }
+
+  .settings-shell-padding {
+    @apply px-4 py-8 sm:px-6 lg:px-10;
+  }
+
+  .settings-bg-accent {
+    @apply pointer-events-none absolute inset-0;
+  }
+
+  .settings-card {
+    @apply rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_14px_50px_rgba(2,6,23,0.08)];
+  }
+
+  .settings-title {
+    @apply text-3xl font-bold tracking-tight text-[color:var(--cot-primary)];
+  }
+
+  .settings-subtitle {
+    @apply mt-2 text-sm text-slate-600;
+  }
+
+  .settings-badge {
+    @apply inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-[color:var(--cot-primary)] shadow-sm;
+  }
+
+  .settings-tab {
+    @apply w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold transition;
+  }
+
+  .settings-tab-active {
+    @apply bg-[color:var(--cot-primary)] text-white shadow-sm;
+  }
+
+  .settings-tab-inactive {
+    @apply bg-slate-50 text-slate-700 hover:bg-slate-100;
+  }
+
+  .settings-tab-desc {
+    @apply mt-0.5 text-xs font-normal text-white/80;
+  }
+
+  .settings-tab-desc-muted {
+    @apply mt-0.5 text-xs font-normal text-slate-500;
+  }
+
+  .settings-label {
+    @apply block text-sm font-medium text-slate-700;
+  }
+
+  .settings-input {
+    @apply mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400;
+    @apply focus:border-[color:var(--cot-primary)] focus:ring-4 focus:ring-[color:rgba(10,42,102,0.14)];
+  }
+
+  .settings-primary-btn {
+    @apply inline-flex w-full items-center justify-center gap-2 rounded-2xl py-3 font-semibold text-white shadow-sm transition;
+    @apply bg-[color:var(--cot-primary)] hover:bg-[color:var(--cot-primary-hover)];
+    @apply focus:outline-none focus:ring-4 focus:ring-[color:rgba(10,42,102,0.14)];
+  }
+
+  .settings-icon-btn {
+    @apply absolute inset-y-0 right-2 my-1 inline-flex items-center justify-center rounded-xl px-2 text-slate-500 transition;
+    @apply hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-[color:rgba(10,42,102,0.25)];
+  }
+}
+
+/* Custom Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Hide React Error Overlay - Suppress timeout/recaptcha errors */
+#react-error-overlay,
+[data-react-error-overlay],
+.react-error-overlay,
+iframe[src*="react-error-overlay"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: fixed !important;
+  z-index: -9999 !important;
 }

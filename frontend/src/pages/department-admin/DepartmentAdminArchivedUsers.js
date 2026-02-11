@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { API_URL } from "../../config/api";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   User,
@@ -11,6 +12,7 @@ import {
   RotateCcw,
   Archive,
   Settings,
+  Loader2,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -26,6 +28,9 @@ const DepartmentAdminArchivedUsers = () => {
 
   const [logoutLoading, setLogoutLoading] = useState(false); //for logout button, it will disable the button if it clicked it once
 
+  // Restore confirmation (replaces window.confirm)
+  const [restoreConfirm, setRestoreConfirm] = useState(null);
+  const [restoring, setRestoring] = useState(false);
 
   const getLinkClass = (path) =>
     `flex items-center gap-2 px-3 py-2 rounded-lg transition ${
@@ -46,7 +51,7 @@ const DepartmentAdminArchivedUsers = () => {
 
     try {
       const token = localStorage.getItem("token");
-      await fetch("http://localhost:5000/api/logs/logout", {
+      await fetch(`${API_URL}/logs/logout`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -74,7 +79,7 @@ const DepartmentAdminArchivedUsers = () => {
     try {
       const department = localStorage.getItem("department");
 
-      const res = await fetch("http://localhost:5000/api/users?archived=true");
+      const res = await fetch(`${API_URL}/users?archived=true`);
       const data = await res.json();
 
       const staffOnly = data.filter(
@@ -90,26 +95,34 @@ const DepartmentAdminArchivedUsers = () => {
     }
   };
 
-  const restoreStaff = async (id) => {
-    if (!window.confirm("Restore this staff member?")) return;
+  /** Open restore confirmation (replaces window.confirm) */
+  const openRestoreConfirm = (user) => {
+    setRestoreConfirm({ id: user._id, name: user.name || user.email || "this staff member" });
+  };
 
+  /** Perform restore after user confirms */
+  const handleRestoreConfirm = async () => {
+    if (!restoreConfirm) return;
+    const { id } = restoreConfirm;
+    setRestoring(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/users/unarchive/${id}`, { 
+      const res = await fetch(`${API_URL}/users/unarchive/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
-        }
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
-
-      toast.success("Staff restored successfully!");
+      toast.success("Staff restored successfully! They will appear in Manage Staff again.");
+      setRestoreConfirm(null);
       fetchArchived();
     } catch (err) {
       console.error(err);
       toast.error("Failed to restore staff");
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -230,7 +243,7 @@ const DepartmentAdminArchivedUsers = () => {
                 </div>
 
                 <button
-                  onClick={() => restoreStaff(user._id)}
+                  onClick={() => openRestoreConfirm(user)}
                   className="w-full mt-4 py-2.5 rounded-lg text-sm text-white font-medium bg-[#0a2a66] hover:bg-[#072051] transition flex items-center justify-center gap-2"
                 >
                   <RotateCcw size={14} /> Restore Staff
@@ -240,6 +253,59 @@ const DepartmentAdminArchivedUsers = () => {
           </div>
         )}
       </main>
+
+      {/* --- RESTORE CONFIRMATION (replaces window.confirm) --- */}
+      {restoreConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => !restoring && setRestoreConfirm(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="restore-staff-dialog-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-gray-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                <RotateCcw size={24} />
+              </div>
+              <h2 id="restore-staff-dialog-title" className="text-xl font-semibold text-gray-800">
+                Restore staff member?
+              </h2>
+            </div>
+            <p className="text-gray-600 text-sm mb-6">
+              Are you sure you want to restore <strong>{restoreConfirm.name}</strong>? They will appear in Manage Staff again.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => !restoring && setRestoreConfirm(null)}
+                disabled={restoring}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRestoreConfirm}
+                disabled={restoring}
+                className="px-4 py-2 rounded-lg bg-[#002B7F] text-white hover:bg-[#001F5A] disabled:opacity-50 flex items-center gap-2"
+              >
+                {restoring ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Restoring…
+                  </>
+                ) : (
+                  "Restore"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

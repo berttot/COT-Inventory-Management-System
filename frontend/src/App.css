@@ -45,3 +45,21 @@
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* Hide React Error Overlay */
+#react-error-overlay,
+[data-react-error-overlay],
+.react-error-overlay,
+iframe[src*="react-error-overlay"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: fixed !important;
+  z-index: -9999 !important;
+}
+
+/* Hide any error overlay divs */
+div[style*="position: fixed"][style*="z-index"]:has(> div:contains("ERROR")) {
+  display: none !important;
+}

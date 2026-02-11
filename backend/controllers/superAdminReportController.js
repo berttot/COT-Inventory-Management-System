@@ -1,9 +1,11 @@
 import fs from "fs";
 import path from "path";
-import fetch from "node-fetch";
+import crypto from "crypto";
+import QRCode from "qrcode";
 import PdfPrinter from "pdfmake";
 import Request from "../models/RequestModel.js";
 import asyncHandler from "../middleware/asyncHandler.js";
+import { generateSignatureImage } from "../utils/signatureUtils.js";
 
 const printer = new PdfPrinter({
   Arial: {
@@ -13,16 +15,6 @@ const printer = new PdfPrinter({
     bolditalics: "./fonts/arialbd.ttf",
   },
 });
-
-const getChartImageBase64 = async (chartConfig) => {
-  const url = `https://quickchart.io/chart?c=${encodeURIComponent(
-    JSON.stringify(chartConfig)
-  )}&format=png&width=700&height=400`;
-
-  const response = await fetch(url);
-  const buffer = await response.arrayBuffer();
-  return `data:image/png;base64,${Buffer.from(buffer).toString("base64")}`;
-};
 
 const getDateRange = (month, year) => {
   const now = new Date();
@@ -45,119 +37,228 @@ export const generateCombinedReport = asyncHandler(async (req, res) => {
 
   const requests = await Request.find({
     requestedAt: { $gte: start, $lte: end },
-  });
+  }).sort({ requestedAt: 1 });
 
   if (requests.length === 0) {
     res.status(404);
     throw new Error("No data found for this period.");
   }
 
-  const departmentStats = {};
-  requests.forEach((request) => {
-    const dept = request.department || "Unknown";
-    if (!departmentStats[dept]) {
-      departmentStats[dept] = { totalRequests: 0, totalQuantity: 0 };
-    }
-    departmentStats[dept].totalRequests++;
-    departmentStats[dept].totalQuantity += Number(request.quantity);
-  });
+  // In inventory systems, a "transaction" typically refers to a completed/posted movement.
+  // For this report, we treat ONLY successful requests (stock issuance) as transactions.
+  const transactions = requests.filter((r) => r.status === "Successful");
 
-  const depTableBody = [
+  if (transactions.length === 0) {
+    res.status(404);
+    throw new Error("No completed transactions found for this period.");
+  }
+
+  const totalTransactions = transactions.length;
+
+  const totalQtyIssued = transactions.reduce(
+    (sum, r) => sum + (Number(r.quantity) || 0),
+    0
+  );
+
+  // --- Scannable verification (QR + SHA-256 hash) ---
+  // Hash is computed from a deterministic fingerprint of the transactions list.
+  const fingerprintLines = transactions.map((r) => {
+    const id = String(r._id || "");
+    const ts = new Date(r.requestedAt || r.createdAt || 0).toISOString();
+    const dept = String(r.department || "");
+    const by = String(r.requestedBy || "");
+    const item = String(r.itemName || "");
+    const qty = String(Number(r.quantity) || 0);
+    return `${id}|${ts}|${dept}|${by}|${item}|${qty}`;
+  });
+  const fingerprint = fingerprintLines.join("\n");
+  const verificationHash = crypto
+    .createHash("sha256")
+    .update(fingerprint)
+    .digest("hex");
+
+  const now = new Date();
+  const generatedLabel = now.toLocaleString("en-PH");
+  const reportMonthLabel = (targetMonth + 1).toString().padStart(2, "0");
+  const reportLabel = `${month || reportMonthLabel}/${year || targetYear}`;
+
+  const qrPayload = {
+    system: "COT Inventory System",
+    reportType: "Super Admin Transaction History",
+    period: {
+      month: Number(month || targetMonth + 1),
+      year: Number(year || targetYear),
+      start: start.toISOString(),
+      end: end.toISOString(),
+    },
+    totals: {
+      transactions: totalTransactions,
+      quantityIssued: totalQtyIssued,
+    },
+    generatedAt: now.toISOString(),
+    generatedBy: req.user?.name || "Super Admin",
+    sha256: verificationHash,
+  };
+
+  let qrDataUrl = null;
+  try {
+    qrDataUrl = await QRCode.toDataURL(JSON.stringify(qrPayload), {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 240,
+      color: {
+        dark: "#0a2a66",
+        light: "#00000000", // transparent background
+      },
+    });
+  } catch (e) {
+    console.warn("QR generation failed:", e?.message || e);
+  }
+
+  const uniqueDepartments = new Set(
+    transactions.map((r) => r.department).filter(Boolean)
+  );
+  const uniqueRequesters = new Set(
+    transactions.map((r) => r.requestedBy).filter(Boolean)
+  );
+
+  const issuedByDepartment = {};
+  transactions.forEach((r) => {
+    const dept = r.department || "Unknown";
+    issuedByDepartment[dept] = (issuedByDepartment[dept] || 0) + (Number(r.quantity) || 0);
+  });
+  const topDepartments = Object.entries(issuedByDepartment)
+    .map(([department, qtyIssued]) => ({ department, qtyIssued }))
+    .sort((a, b) => b.qtyIssued - a.qtyIssued)
+    .slice(0, 5);
+
+  const issuedByItem = {};
+  transactions.forEach((r) => {
+    const item = r.itemName || "Unknown";
+    issuedByItem[item] = (issuedByItem[item] || 0) + (Number(r.quantity) || 0);
+  });
+  const topItems = Object.entries(issuedByItem)
+    .map(([itemName, qtyIssued]) => ({ itemName, qtyIssued }))
+    .sort((a, b) => b.qtyIssued - a.qtyIssued)
+    .slice(0, 5);
+
+  const shortId = (id) => {
+    const s = String(id || "");
+    return s.length > 6 ? s.slice(-6).toUpperCase() : s.toUpperCase();
+  };
+
+  const summaryTableBody = [
+    [{ text: "Metric", bold: true }, { text: "Value", bold: true }],
+    ["Total transactions", String(totalTransactions)],
+    ["Total quantity issued", String(totalQtyIssued)],
+    ["Departments involved", String(uniqueDepartments.size)],
+    ["Unique requesters", String(uniqueRequesters.size)],
+  ];
+
+  const topDeptTableBody = [
+    [{ text: "Top departments by quantity issued", bold: true }, { text: "Qty issued", bold: true }],
+    ...(topDepartments.length
+      ? topDepartments.map((d) => [d.department, String(d.qtyIssued)])
+      : [["—", "0"]]),
+  ];
+
+  const topItemsTableBody = [
+    [{ text: "Top items by quantity issued", bold: true }, { text: "Qty issued", bold: true }],
+    ...(topItems.length
+      ? topItems.map((i) => [i.itemName, String(i.qtyIssued)])
+      : [["—", "0"]]),
+  ];
+
+  const transactionsTableBody = [
     [
+      { text: "Transaction ID", bold: true },
+      { text: "Date & time", bold: true },
+      { text: "Type", bold: true },
       { text: "Department", bold: true },
-      { text: "Total Requests", bold: true },
-      { text: "Total Quantity Requested", bold: true },
+      { text: "Requested by", bold: true },
+      { text: "Item", bold: true },
+      { text: "Qty", bold: true, alignment: "right" },
+      { text: "Status", bold: true },
     ],
   ];
 
-  Object.entries(departmentStats).forEach(([dept, stats]) => {
-    depTableBody.push([
-      dept,
-      stats.totalRequests.toString(),
-      stats.totalQuantity.toString(),
+  transactions.forEach((r) => {
+    const status = "Successful";
+    transactionsTableBody.push([
+      { text: shortId(r._id), fontSize: 8 },
+      { text: new Date(r.requestedAt || r.createdAt).toLocaleString("en-PH"), fontSize: 8 },
+      { text: "Issue (request)", fontSize: 8 },
+      { text: r.department || "—", fontSize: 8 },
+      { text: r.requestedBy || "—", fontSize: 8 },
+      { text: r.itemName || "—", fontSize: 8 },
+      { text: String(r.quantity ?? "—"), fontSize: 8, alignment: "right" },
+      {
+        text: status,
+        fontSize: 8,
+        color: "#047857",
+      },
     ]);
   });
 
-  const depChartConfig = {
-    type: "bar",
-    data: {
-      labels: Object.keys(departmentStats),
-      datasets: [
-        {
-          label: "Total Requests",
-          data: Object.values(departmentStats).map((d) => d.totalRequests),
-          backgroundColor: "rgba(54,162,235,0.7)",
-        },
-        {
-          label: "Total Quantity Requested",
-          data: Object.values(departmentStats).map((d) => d.totalQuantity),
-          backgroundColor: "rgba(255,206,86,0.7)",
-        },
-      ],
-    },
-  };
+  // Get logged-in user's name for "Prepared by" section (should be super admin)
+  const preparedByName = req.user?.name || "Super Admin";
+  
+  // Fixed names for other sections
+  const deanName = "Dr. Marilou O. Espina";
 
-  const depChartBase64 = await getChartImageBase64(depChartConfig);
-
-  const itemStats = {};
-  requests.forEach((request) => {
-    const item = request.itemName || "Unknown";
-    const dept = request.department || "Unknown";
-
-    if (!itemStats[item]) {
-      itemStats[item] = {
-        totalQuantity: 0,
-        departments: new Set(),
-      };
-    }
-
-    itemStats[item].totalQuantity += Number(request.quantity);
-    itemStats[item].departments.add(dept);
-  });
-
-  const finalItems = Object.entries(itemStats)
-    .map(([item, data]) => ({
-      item,
-      totalQuantity: data.totalQuantity,
-      departmentsCount: data.departments.size,
-    }))
-    .sort((a, b) => b.totalQuantity - a.totalQuantity);
-
-  const itemTableBody = [
-    [
-      { text: "Item Name", bold: true },
-      { text: "Total Quantity", bold: true },
-      { text: "Departments Requested", bold: true },
-    ],
-  ];
-
-  finalItems.forEach((item) =>
-    itemTableBody.push([
-      item.item,
-      item.totalQuantity.toString(),
-      item.departmentsCount.toString(),
-    ])
-  );
-
-  const topItems = finalItems.slice(0, 10);
-  const itemChartConfig = {
-    type: "bar",
-    data: {
-      labels: topItems.map((i) => i.item),
-      datasets: [
-        {
-          label: "Quantity Requested",
-          data: topItems.map((i) => i.totalQuantity),
-          backgroundColor: "rgba(75,192,192,0.7)",
-        },
-      ],
-    },
-  };
-
-  const itemChartBase64 = await getChartImageBase64(itemChartConfig);
+  // Generate signature images
+  const preparedBySignature = generateSignatureImage(preparedByName);
+  const deanSignature = generateSignatureImage(deanName);
 
   const docDefinition = {
-    pageMargins: [40, 60, 40, 60],
+    pageOrientation: "landscape",
+    pageMargins: [40, 80, 40, 60],
+    header: (currentPage, pageCount) => ({
+      columns: [
+        {
+          text: "COT Inventory System",
+          fontSize: 9,
+          bold: true,
+          color: "#0a2a66",
+        },
+        {
+          text: "Super Admin Transaction History Report",
+          fontSize: 9,
+          bold: true,
+          alignment: "center",
+          color: "#0a2a66",
+        },
+        {
+          text: currentPage === 1 ? generatedLabel : `Page ${currentPage} of ${pageCount}`,
+          fontSize: 8,
+          alignment: "right",
+          color: "#666",
+        },
+      ],
+      margin: [40, 20, 40, 10],
+    }),
+    footer: (currentPage, pageCount) => ({
+      columns: [
+        {
+          text: "For internal use only. College of Technology.",
+          fontSize: 7,
+          color: "#888",
+        },
+        {
+          text: `Page ${currentPage} of ${pageCount}`,
+          fontSize: 8,
+          alignment: "center",
+          color: "#666",
+        },
+        {
+          text: `Total transactions: ${totalTransactions}`,
+          fontSize: 7,
+          alignment: "right",
+          color: "#888",
+        },
+      ],
+      margin: [40, 8, 40, 15],
+    }),
     content: [
       {
         columns: [
@@ -172,29 +273,112 @@ export const generateCombinedReport = asyncHandler(async (req, res) => {
           },
         ],
       },
-      { text: `\nInclusive Dates: ${start.toLocaleDateString()} - ${end.toLocaleDateString()}`, alignment: "center" },
-      { text: "\n1. Department Summary", style: "sectionHeader" },
       {
-        table: { headerRows: 1, widths: ["*", "auto", "auto"], body: depTableBody },
-        layout: "lightHorizontalLines",
-        margin: [0, 5, 0, 20],
+        text: "\nTRANSACTION HISTORY REPORT",
+        alignment: "center",
+        bold: true,
+        fontSize: 14,
+        color: "#fff",
+        fillColor: "#333",
+        margin: [0, 10, 0, 10],
       },
-      { image: depChartBase64, width: 500, alignment: "center", margin: [0, 10, 0, 20] },
-      { text: "", pageBreak: "after" },
-      { text: "2. Most Requested Items", style: "sectionHeader" },
       {
-        table: { headerRows: 1, widths: ["*", "auto", "auto"], body: itemTableBody },
-        layout: "lightHorizontalLines",
-        margin: [0, 10, 0, 20],
+        columns: [
+          {
+            width: "*",
+            stack: [
+              {
+                text: `Inclusive Dates: ${start.toLocaleDateString("en-PH")} - ${end.toLocaleDateString(
+                  "en-PH"
+                )}\nPeriod: ${reportLabel} | Generated: ${generatedLabel}`,
+                alignment: "left",
+              },
+              {
+                text: `Verification Hash: ${verificationHash.slice(0, 16).toUpperCase()}`,
+                fontSize: 9,
+                color: "#333",
+                margin: [0, 6, 0, 0],
+              },
+              {
+                text: "Scan the QR code to view full verification payload.",
+                fontSize: 8,
+                color: "#555",
+                margin: [0, 2, 0, 0],
+              },
+            ],
+          },
+          {
+            width: 140,
+            stack: [
+              ...(qrDataUrl ? [{ image: qrDataUrl, width: 120, alignment: "right" }] : []),
+            ],
+          },
+        ],
+        columnGap: 10,
+        margin: [0, 0, 0, 10],
       },
-      { image: itemChartBase64, width: 500, alignment: "center" },
+      { text: "Summary", style: "sectionHeader" },
+      {
+        columns: [
+          {
+            width: "*",
+            table: { headerRows: 1, widths: ["*", "auto"], body: summaryTableBody },
+            layout: "lightHorizontalLines",
+          },
+          {
+            width: "*",
+            table: { headerRows: 1, widths: ["*", "auto"], body: topDeptTableBody },
+            layout: "lightHorizontalLines",
+          },
+          {
+            width: "*",
+            table: { headerRows: 1, widths: ["*", "auto"], body: topItemsTableBody },
+            layout: "lightHorizontalLines",
+          },
+        ],
+        columnGap: 10,
+        margin: [0, 0, 0, 12],
+      },
+      {
+        text: "Transaction list (chronological)",
+        style: "sectionHeader",
+        margin: [0, 10, 0, 6],
+      },
+      {
+        table: {
+          headerRows: 1,
+          widths: [80, 120, 80, 120, 120, "*", 50, 80],
+          body: transactionsTableBody,
+        },
+        layout: "lightHorizontalLines",
+      },
+      {
+        text: "\nNotes:\n- This report includes completed/posted transactions only (stock issuances).\n- Restocks and manual adjustments (if any) are tracked separately via inventory updates/system logs.",
+        fontSize: 9,
+        color: "#444",
+        margin: [0, 10, 0, 0],
+      },
       { text: "", pageBreak: "after" },
       { text: "\nAnalysis/Remarks (3–5 sentences):", bold: true, margin: [0, 20, 0, 10] },
-      { text: "_____________________________________________________________\n".repeat(4), margin: [0, 0, 0, 30] },
-      { text: "Prepared by:", bold: true, margin: [0, 30, 0, 5] },
-      { text: "__________________________\nSuper Admin - College of Technology" },
-      { text: "\nApproved by:", bold: true, margin: [0, 20, 0, 5] },
-      { text: "__________________________\nDean/Head - College of Technology" },
+      { text: "_____________________________________________________________\n".repeat(4), margin: [0, 0, 0, 50] },
+      {
+        stack: [
+          { text: "Prepared by:", bold: true, margin: [0, 0, 0, 12] },
+          ...(preparedBySignature ? [{ image: preparedBySignature, width: 160, alignment: "left", margin: [0, 0, 0, 6] }] : []),
+          { text: preparedByName, alignment: "left", margin: [0, 0, 0, 5] },
+          { text: "Super Admin - College of Technology", fontSize: 9, alignment: "left", margin: [0, 0, 0, 0] },
+        ],
+        margin: [0, 0, 0, 35],
+      },
+      {
+        stack: [
+          { text: "Approved by:", bold: true, margin: [0, 0, 0, 12] },
+          ...(deanSignature ? [{ image: deanSignature, width: 160, alignment: "left", margin: [0, 0, 0, 6] }] : []),
+          { text: deanName, alignment: "left", margin: [0, 0, 0, 5] },
+          { text: "Dean/Head - College of Technology", fontSize: 9, alignment: "left", margin: [0, 0, 0, 0] },
+        ],
+        margin: [0, 0, 0, 0],
+      },
     ],
     styles: {
       sectionHeader: {
@@ -206,18 +390,58 @@ export const generateCombinedReport = asyncHandler(async (req, res) => {
     defaultStyle: { font: "Arial", fontSize: 10 },
   };
 
-  const pdfDoc = printer.createPdfKitDocument(docDefinition);
-  const reportsDir = "./reports";
-  fs.mkdirSync(reportsDir, { recursive: true });
+  try {
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+    const reportsDir = "./reports";
+    fs.mkdirSync(reportsDir, { recursive: true });
 
-  const filePath = path.resolve(
-    `${reportsDir}/Combined_Report_${month || targetMonth + 1}_${year || targetYear}.pdf`
-  );
+    const filePath = path.resolve(
+      `${reportsDir}/Transaction_History_${month || targetMonth + 1}_${year || targetYear}.pdf`
+    );
 
-  const stream = fs.createWriteStream(filePath);
-  pdfDoc.pipe(stream);
-  pdfDoc.end();
-
-  stream.on("finish", () => res.download(filePath));
+    const stream = fs.createWriteStream(filePath);
+    
+    pdfDoc.pipe(stream);
+    
+    pdfDoc.on("error", (error) => {
+      console.error("PDF generation error:", error);
+      stream.destroy();
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (unlinkError) {
+        console.error("Error deleting file:", unlinkError);
+      }
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to generate PDF: " + error.message });
+      }
+    });
+    
+    stream.on("error", (error) => {
+      console.error("Stream error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to write PDF file: " + error.message });
+      }
+    });
+    
+    stream.on("finish", () => {
+      if (!res.headersSent) {
+        res.download(filePath, (err) => {
+          if (err) {
+            console.error("Download error:", err);
+            if (!res.headersSent) {
+              res.status(500).json({ message: "Failed to download PDF: " + err.message });
+            }
+          }
+        });
+      }
+    });
+    
+    pdfDoc.end();
+  } catch (error) {
+    console.error("Error creating PDF document:", error);
+    res.status(500).json({ message: "Failed to generate report: " + error.message });
+  }
 });
 

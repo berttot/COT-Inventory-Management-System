@@ -1,24 +1,12 @@
-import fetch from "node-fetch";
 import Request from "../models/RequestModel.js";
 import Item from "../models/ItemModel.js";
 import {
   maybeCreateLowStockEvent,
   maybeCreateRestockEvent,
 } from "../utils/stockAlerts.js";
+import { emitStockAlerts } from "../utils/socketService.js";
+import { getWorldTime } from "../utils/getWorldTime.js";
 import asyncHandler from "../middleware/asyncHandler.js";
-
-const fetchCurrentTime = async () => {
-  try {
-    const response = await fetch("https://timeapi.io/api/Time/current/zone?timeZone=Asia/Manila");
-    if (!response.ok) {
-      return new Date();
-    }
-    const data = await response.json();
-    return new Date(data.dateTime);
-  } catch {
-    return new Date();
-  }
-};
 
 export const createRequest = asyncHandler(async (req, res) => {
   const { userId, itemId, itemName, department, requestedBy, quantity } = req.body;
@@ -49,7 +37,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     throw new Error("Request Unsuccessful, Not enough stock available. Try again");
   }
 
-  const currentTime = await fetchCurrentTime();
+  const currentTime = await getWorldTime();
   const newRequest = await Request.create({
     userId,
     itemId,
@@ -67,6 +55,7 @@ export const createRequest = asyncHandler(async (req, res) => {
 
   await maybeCreateLowStockEvent(item, prevQty, item.quantity);
   await maybeCreateRestockEvent(item, prevQty, item.quantity);
+  await emitStockAlerts();
 
   res.status(201).json({
     message: "Request successful.",

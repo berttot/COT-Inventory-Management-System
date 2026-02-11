@@ -2,8 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import fetch from "node-fetch";
 import User from "../models/UserModel.js";
-import AuditLog from "../models/AuditLog.js";
-import { getWorldTime } from "../utils/getWorldTime.js";
+import { recordAudit } from "../utils/auditLogService.js";
 import asyncHandler from "../middleware/asyncHandler.js";
 
 const verifyRecaptcha = async (token) => {
@@ -60,20 +59,13 @@ export const login = asyncHandler(async (req, res) => {
     { expiresIn: "1h" }
   );
 
-  try {
-    await AuditLog.create({
-      userId: user._id,
-      name: user.name,
-      role: user.role,
-      action: "LOGIN",
-      details: "Login successful",
-      timestamp: await getWorldTime(),
-      ipAddress: req.ip,
-      userAgent: req.get("User-Agent"),
-    });
-  } catch (err) {
-    console.warn("Failed to create login audit:", err.message);
-  }
+  await recordAudit(req, {
+    userId: user._id,
+    name: user.name,
+    role: user.role,
+    action: "LOGIN",
+    details: `Signed in to the system. AccessID: ${user.accessID} | Role: ${user.role} | Department: ${user.department || "—"}.`,
+  });
 
   res.json({
     message: "Login successful",

@@ -1,27 +1,13 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/UserModel.js";
-import AuditLog from "../models/AuditLog.js";
+import { recordAudit } from "../utils/auditLogService.js";
 import { sendEmail } from "../utils/email.js";
-import { getWorldTime } from "../utils/getWorldTime.js";
+import { getUserFromHeader } from "../utils/authUtils.js";
 import asyncHandler from "../middleware/asyncHandler.js";
 
 const strongRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-
 const isStrongPassword = (password) => strongRegex.test(password);
-
-const getUserFromHeader = async (req) => {
-  try {
-    const auth = req.headers.authorization;
-    if (!auth) return null;
-    const token = auth.split(" ")[1];
-    if (!token) return null;
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    return User.findById(decoded.id).select("-password");
-  } catch {
-    return null;
-  }
-};
 
 let sseClients = [];
 
@@ -83,24 +69,20 @@ export const createUser = asyncHandler(async (req, res) => {
     password: hashedPassword,
   });
 
-  await AuditLog.create({
+  await recordAudit(req, {
     userId: newUser._id,
     name: newUser.name,
     role: newUser.role,
     action: "CREATE_ACCOUNT",
-    details: `Account created (${newUser.email}) | Department: ${newUser.department} | AccessID: ${newUser.accessID}`,
-    timestamp: await getWorldTime(),
-    ipAddress: req.ip,
-    userAgent: req.get("User-Agent"),
+    details: `New account created. Name: ${newUser.name} | Email: ${newUser.email} | Role: ${newUser.role} | Department: ${newUser.department} | AccessID: ${newUser.accessID}. Welcome email sent to user.`,
   });
 
   await sendEmail({
     to: email,
-    subject: "Your COT Inventory System Access ID",
+    subject: "Your COT Inventory System Account",
     html: `
       <p>Hello <strong>${name}</strong>,</p>
       <p>Your account has been successfully created as a <strong>${role}</strong>.</p>
-      <p>Your Access ID is: <strong>${accessID}</strong></p>
       <p>You can now log in at: 
         <a href="http://localhost:3000" target="_blank" style="color:#2563eb;">COT Inventory System Login</a>
       </p>
@@ -110,7 +92,6 @@ export const createUser = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     message: "User created successfully!",
-    accessID,
   });
 });
 
@@ -132,6 +113,14 @@ export const changePassword = asyncHandler(async (req, res) => {
   const hashedNew = await bcrypt.hash(newPassword, 10);
   user.password = hashedNew;
   await user.save();
+
+  await recordAudit(req, {
+    userId: user._id,
+    name: user.name,
+    role: user.role,
+    action: "PASSWORD_CHANGED",
+    details: `Password was changed from Account Settings. User: ${user.name} | Email: ${user.email} | Role: ${user.role}.`,
+  });
 
   res.json({ message: "Password updated successfully" });
 });
@@ -165,6 +154,14 @@ export const resetPassword = asyncHandler(async (req, res) => {
   user.password = await bcrypt.hash(newPassword, saltRounds);
   await user.save();
 
+  await recordAudit(req, {
+    userId: user._id,
+    name: user.name,
+    role: user.role,
+    action: "PASSWORD_RESET",
+    details: `Password was reset using the email reset link. User: ${user.name} | Email: ${user.email} | Role: ${user.role}. New password set successfully.`,
+  });
+
   res.json({ message: "Password reset successfully! You can now log in with your new password." });
 });
 
@@ -189,6 +186,17 @@ export const updateUser = asyncHandler(async (req, res) => {
     throw new Error("User not found");
   }
 
+  const actor = await getUserFromHeader(req);
+  const changedFields = Object.keys(updates).filter((k) => k !== "password").join(", ") || "profile";
+  const actorInfo = actor?.name ? ` Edited by: ${actor.name} (${actor.role}).` : "";
+  await recordAudit(req, {
+    userId: actor?._id,
+    name: actor?.name,
+    role: actor?.role,
+    action: "PROFILE_UPDATED",
+    details: `Profile/account was edited. Target user: ${updated.name} | AccessID: ${updated.accessID} | Role: ${updated.role} | Department: ${updated.department || "—"}. Changed fields: ${changedFields}.${actorInfo}`,
+  });
+
   res.json(updated);
 });
 
@@ -208,15 +216,13 @@ export const archiveUser = asyncHandler(async (req, res) => {
 
   broadcastLockUpdate({ type: "unlock", userId: updated._id });
 
-  await AuditLog.create({
+  const actorInfo = actor?.name ? ` Archived by: ${actor.name} (${actor.role}).` : "";
+  await recordAudit(req, {
     userId: actor?._id,
     name: actor?.name,
     role: actor?.role,
     action: "ARCHIVE_USER",
-    details: `Archived user: ${target.name} (AccessID: ${target.accessID})`,
-    timestamp: await getWorldTime(),
-    ipAddress: req.ip,
-    userAgent: req.get("User-Agent"),
+    details: `User account was archived (deactivated). User: ${target.name} | AccessID: ${target.accessID} | Role: ${target.role} | Department: ${target.department || "—"}. User can be restored later.${actorInfo}`,
   });
 
   res.json({ message: "User archived successfully" });
@@ -236,15 +242,13 @@ export const unarchiveUser = asyncHandler(async (req, res) => {
     { new: true }
   );
 
-  await AuditLog.create({
+  const actorInfo = actor?.name ? ` Restored by: ${actor.name} (${actor.role}).` : "";
+  await recordAudit(req, {
     userId: actor?._id,
     name: actor?.name,
     role: actor?.role,
     action: "UNARCHIVE_USER",
-    details: `Restored user: ${target.name} (AccessID: ${target.accessID})`,
-    timestamp: await getWorldTime(),
-    ipAddress: req.ip,
-    userAgent: req.get("User-Agent"),
+    details: `User account was restored from archive. User: ${target.name} | AccessID: ${target.accessID} | Role: ${target.role} | Department: ${target.department || "—"}.${actorInfo}`,
   });
 
   res.json({ message: "User restored successfully" });

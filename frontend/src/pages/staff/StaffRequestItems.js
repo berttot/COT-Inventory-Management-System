@@ -11,8 +11,30 @@ import {
   Search,
   XCircle,
   Settings,
+  Package,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { API_URL } from "../../config/api";
+
+/** Title-case for display (e.g. "HOME SUPPLY" -> "Home Supply") */
+const toTitleCase = (str) => {
+  if (!str || typeof str !== "string") return str;
+  return str.trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+/** Unique categories from items, case-insensitive (one canonical string per category) */
+const getCanonicalCategories = (itemsList) => {
+  const seen = new Map();
+  for (const item of itemsList) {
+    const cat = item.category;
+    if (!cat) continue;
+    const key = cat.trim().toLowerCase();
+    if (!seen.has(key)) seen.set(key, cat.trim());
+  }
+  return Array.from(seen.values()).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" })
+  );
+};
 
 const StaffRequestItems = () => {
   const [items, setItems] = useState([]);
@@ -49,7 +71,7 @@ const StaffRequestItems = () => {
   // Fetch all items
   const fetchItems = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/items");
+      const res = await fetch(`${API_URL}/items`);
       const data = await res.json();
       setItems(data);
       setFilteredItems(data);
@@ -62,13 +84,19 @@ const StaffRequestItems = () => {
     fetchItems();
   }, []);
 
-  //  Search + filter logic
+  // Categories from inventory (reflects super admin–added categories)
+  const categories = ["All", ...getCanonicalCategories(items)];
+
+  // Search + filter logic (case-insensitive category match)
   useEffect(() => {
     let result = items.filter((item) =>
       item.name.toLowerCase().includes(search.toLowerCase())
     );
-    if (filterCategory !== "All") {
-      result = result.filter((item) => item.category === filterCategory);
+    if (filterCategory && filterCategory !== "All") {
+      const key = filterCategory.trim().toLowerCase();
+      result = result.filter(
+        (item) => (item.category || "").trim().toLowerCase() === key
+      );
     }
     setFilteredItems(result);
   }, [search, filterCategory, items]);
@@ -78,45 +106,6 @@ const StaffRequestItems = () => {
     setSelectedItem(item);
     setQuantity(1);
   };
-
-  //  Submit request
-  // const handleSubmitRequest = async () => {
-  //   if (!selectedItem) return;
-
-  //   if (quantity <= 0) {
-  //     toast.warning("Please enter a valid quantity.");
-  //     return;
-  //   }
-
-  //   try {
-  //     const res = await fetch("http://localhost:5000/api/requests", {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({
-  //         userId,
-  //         itemId: selectedItem._id,
-  //         itemName: selectedItem.name,
-  //         department,
-  //         requestedBy: userName,
-  //         quantity,
-  //       }),
-  //     });
-
-  //     const data = await res.json();
-
-  //     if (res.ok) {
-  //       toast.success(`Request for "${selectedItem.name}" successful!`);
-  //       setSelectedItem(null);
-  //       await fetchItems(); // Refresh inventory
-  //     } else {
-  //       toast.error(data.message || "Request failed");
-  //       setSelectedItem(null);
-  //     }
-  //   } catch (err) {
-  //     console.error("Error submitting request:", err);
-  //     toast.error("Server error while submitting request.");
-  //   }
-  // };
 
   const handleSubmitRequest = async () => {
     if (!selectedItem || submitLoading) return;
@@ -129,7 +118,7 @@ const StaffRequestItems = () => {
     setSubmitLoading(true); // ⛔ lock button
 
     try {
-      const res = await fetch("http://localhost:5000/api/requests", {
+        const res = await fetch(`${API_URL}/requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -176,19 +165,13 @@ const StaffRequestItems = () => {
     return { text: "Available", color: "bg-green-100 text-green-600" };
   };
 
-  // const handleLogout = () => {
-  //   localStorage.removeItem("token");
-  //   navigate("/");
-  // };
-
-  // frontend snippet (all pages where handleLogout used)
   const handleLogout = async () => {
     if (logoutLoading) return; // ⛔ prevents double click
     setLogoutLoading(true);
 
     try {
       const token = localStorage.getItem("token");
-      await fetch("http://localhost:5000/api/logs/logout", {
+      await fetch(`${API_URL}/logs/logout`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -277,219 +260,169 @@ const StaffRequestItems = () => {
 
       {/* Main Content */}
       <main className="flex-1 p-8 overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-[#002B7F]">Request Items</h1>
-        </div>
-
-        {/* Search + Filters */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative w-1/3 mt-4">
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-            <input
-              type="text"
-              placeholder="Search items..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-[#0a2a66]">Request Items</h1>
+            <p className="text-gray-600 mt-1">Browse inventory and submit requests</p>
           </div>
 
-          <div className="flex gap-2">
-            {["All", "Office Supply", "Janitor Supply"].map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setFilterCategory(cat)}
-                className={`px-4 py-2 rounded-lg border transition ${
-                  filterCategory === cat
-                    ? "bg-[#002B7F] text-white border-[#002B7F]"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
-                }`}
+          {/* Search + Category dropdown */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-full md:w-[280px]">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={18}
+              />
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="mt-0 w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0a2a66]/20 focus:border-[#0a2a66] transition"
+              />
+            </div>
+            <div className="bg-white border border-gray-300 rounded-xl px-3 py-2 shadow-sm min-w-[160px]">
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="outline-none text-sm text-gray-900 pr-6 w-full bg-transparent focus:ring-0"
               >
-                {cat}
-              </button>
-            ))}
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat === "All" ? "All categories" : toTitleCase(cat)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
         {/* Item Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredItems.map((item) => {
             const status = getStatus(item.quantity);
             return (
               <div
                 key={item._id}
-                className="bg-white p-5 rounded-2xl shadow-md border border-gray-200 hover:shadow-lg transition flex flex-col justify-between h-full"
+                className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden hover:shadow-lg hover:border-gray-200 transition flex flex-col"
               >
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-[15px] font-semibold text-gray-800 leading-snug">
+                <div className="p-5 flex-1 flex flex-col">
+                  <div className="flex justify-between items-start gap-2 mb-3">
+                    <h3 className="text-[15px] font-semibold text-gray-800 leading-snug line-clamp-2">
                       {item.name}
                     </h3>
                     <span
-                      className={`text-[11px] font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${status.color}`}
-                      style={{ minWidth: "80px", textAlign: "center" }}
+                      className={`text-[11px] font-medium px-2.5 py-1 rounded-lg shrink-0 ${status.color}`}
                     >
                       {status.text}
                     </span>
                   </div>
-
-                  <p className="text-[13px] text-gray-600">
-                    <strong>Category:</strong> {item.category}
-                  </p>
+                  <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                    <Package size={14} className="shrink-0" />
+                    <span>{toTitleCase(item.category)}</span>
+                  </div>
                   <p className="text-[13px] text-gray-600 mb-4">
-                    <strong>Available:</strong> {item.quantity} {item.unit}s
+                    <strong className="text-gray-700">Available:</strong>{" "}
+                    {item.quantity} {item.unit}
                   </p>
                 </div>
-
-                <button
-                  onClick={() => handleRequest(item)}
-                  disabled={item.quantity === 0}
-                  className={`w-full py-2.5 rounded-lg text-sm text-white font-medium transition ${
-                    item.quantity === 0
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-[#0b347a] hover:bg-[#0a2a66]"
-                  }`}
-                >
-                  + Request Item
-                </button>
+                <div className="p-4 pt-0">
+                  <button
+                    onClick={() => handleRequest(item)}
+                    disabled={item.quantity === 0}
+                    className={`w-full py-2.5 rounded-xl text-sm font-medium transition ${
+                      item.quantity === 0
+                        ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                        : "bg-[#0b347a] hover:bg-[#0a2a66] text-white shadow-sm"
+                    }`}
+                  >
+                    + Request Item
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
 
         {filteredItems.length === 0 && (
-          <p className="text-center text-gray-500 mt-10 italic">
-            No items found.
-          </p>
+          <div className="text-center py-16 px-4">
+            <Package className="mx-auto text-gray-300 mb-3" size={48} />
+            <p className="text-gray-500">No items found.</p>
+            <p className="text-sm text-gray-400 mt-1">
+              Try a different search or category.
+            </p>
+          </div>
         )}
       </main>
 
-      {/*  Request Quantity Modal */}
-      {/* {selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md relative">
-            <button
-              onClick={() => setSelectedItem(null)}
-              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
-            >
-              <XCircle size={22} />
-            </button>
-
-            <h2 className="text-2xl font-bold mb-4 text-center text-[#002B7F]">
-              Request Item
-            </h2>
-            <p className="text-center text-gray-600 mb-6">
-              <strong>{selectedItem.name}</strong>
-            </p>
-
-            <label className="block text-gray-700 font-medium mb-2">
-              Enter quantity:
-            </label>
-            <input
-              type="number"
-              min="1"
-              max={selectedItem.quantity}
-              value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 mb-6"
-            />
-
-            <div className="flex justify-end gap-3">
+      {selectedItem && (
+        <div className="fixed inset-0 z-50 flex justify-center items-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md border border-gray-100 overflow-hidden">
+            <div className="px-6 pt-6 pb-2 flex justify-between items-center border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900">Request Item</h2>
               <button
+                type="button"
                 onClick={() => setSelectedItem(null)}
-                className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                aria-label="Close"
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmitRequest}
-                className="px-4 py-2 rounded-lg bg-[#0b347a] hover:bg-[#0a2a66] text-white font-medium"
-              >
-                Submit Request
+                <XCircle size={20} />
               </button>
             </div>
-          </div>
-        </div>
-      )} */}
-
-      {selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md relative">
-            <button
-              onClick={() => setSelectedItem(null)}
-              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
-            >
-              <XCircle size={22} />
-            </button>
-
-            <h2 className="text-2xl font-bold mb-4 text-center text-[#002B7F]">
-              Request Item
-            </h2>
-            <p className="text-center text-gray-600 mb-6">
-              <strong>{selectedItem.name}</strong>
-            </p>
-
-            <label className="block text-gray-700 font-medium mb-2">
-              Enter quantity:
-            </label>
-
-            <input
-              type="number"
-              min="1"
-              max={selectedItem.quantity}
-              value={quantity}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                setQuantity(value >= 1 ? value : 1);
-              }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-            />
-
-            {/* ⚠ Live validation */}
-            {quantity > selectedItem.quantity && (
-              <p className="text-red-600 text-sm mt-2 mb-0">
-                Quantity exceeds available stock!
+            <div className="p-6">
+              <p className="text-gray-800 font-medium mb-1">{selectedItem.name}</p>
+              <p className="text-sm text-gray-500 mb-6">
+                {toTitleCase(selectedItem.category)} · {selectedItem.quantity} {selectedItem.unit} available
               </p>
-            )}
 
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100"
-              >
-                Cancel
-              </button>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Quantity
+              </label>
+              <input
+                type="number"
+                min="1"
+                max={selectedItem.quantity}
+                value={quantity}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  setQuantity(value >= 1 ? value : 1);
+                }}
+                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0a2a66]/20 focus:border-[#0a2a66] transition"
+              />
 
-              {/* <button
-                onClick={handleSubmitRequest}
-                disabled={quantity > selectedItem.quantity || quantity <= 0}
-                className={`px-4 py-2 rounded-lg font-medium text-white
-                  ${quantity > selectedItem.quantity || quantity <= 0
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-[#0b347a] hover:bg-[#0a2a66]"
+              {quantity > selectedItem.quantity && (
+                <p className="text-red-600 text-sm mt-2">
+                  Quantity exceeds available stock.
+                </p>
+              )}
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setSelectedItem(null)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 transition font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitRequest}
+                  disabled={
+                    submitLoading ||
+                    quantity > selectedItem.quantity ||
+                    quantity <= 0
+                  }
+                  className={`px-4 py-2.5 rounded-xl font-medium transition ${
+                    submitLoading ||
+                    quantity > selectedItem.quantity ||
+                    quantity <= 0
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-[#0b347a] hover:bg-[#0a2a66] text-white"
                   }`}
-              >
-                Submit Request
-              </button> */}
-
-              <button
-                onClick={handleSubmitRequest}
-                disabled={
-                  submitLoading ||
-                  quantity > selectedItem.quantity ||
-                  quantity <= 0
-                }
-                className={`px-4 py-2 rounded-lg font-medium text-white transition
-                  ${submitLoading ||
-                  quantity > selectedItem.quantity ||
-                  quantity <= 0
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-[#0b347a] hover:bg-[#0a2a66]"
-                  }`}
-              >
-                {submitLoading ? "Submitting..." : "Submit Request"}
-              </button>
-
+                >
+                  {submitLoading ? "Submitting…" : "Submit Request"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { EyeOpenIcon, EyeClosedIcon } from "@radix-ui/react-icons";
+import AuthShell from "../../components/AuthShell";
+import { API_URL } from "../../config/api";
 
 function ResetPassword() {
   const [newPassword, setNewPassword] = useState("");
@@ -25,7 +27,7 @@ function ResetPassword() {
 
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:5000/api/users/reset-password", {
+      const response = await fetch(`${API_URL}/users/reset-password`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, newPassword }),
@@ -47,69 +49,89 @@ function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen flex justify-center items-center bg-gradient-to-br from-blue-100 via-white to-blue-50">
-      <form
-        onSubmit={handleReset}
-        className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100"
-      >
-        <h2 className="text-3xl font-bold mb-2 text-center text-[#0a2a66]">
-          Reset Password
-        </h2>
-        <p className="text-sm text-gray-500 text-center mb-6">
-          Create a secure new password for your account.
-        </p>
-
+    <AuthShell
+      title="Reset password"
+      subtitle="Create a secure new password for your account."
+      footer={
+        <div className="flex items-center justify-center gap-2">
+          <span>Go back?</span>
+          <Link
+            to="/"
+            className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+          >
+            Back to login
+          </Link>
+        </div>
+      }
+    >
+      <form onSubmit={handleReset} className="space-y-4">
         {/* New Password Field */}
-        <div className="mb-4">
-          <label className="block text-gray-700 font-medium mb-1">New Password</label>
+        <div>
+          <label
+            htmlFor="newPassword"
+            className="auth-label"
+          >
+            New password
+          </label>
 
-          <div className="relative">
+          <div className="relative mt-1">
             <input
+              id="newPassword"
               type={showNewPassword ? "text" : "password"}
-              className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none pr-12"
+              className="auth-input pr-12"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
               placeholder="Enter new password"
+              autoComplete="new-password"
             />
 
             <button
               type="button"
               onClick={() => setShowNewPassword(!showNewPassword)}
-              className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+              className="auth-icon-btn"
+              aria-label={showNewPassword ? "Hide password" : "Show password"}
             >
               {showNewPassword ? (
-                <EyeClosedIcon className="w-5 h-5" />
+                <EyeClosedIcon className="h-5 w-5" />
               ) : (
-                <EyeOpenIcon className="w-5 h-5" />
+                <EyeOpenIcon className="h-5 w-5" />
               )}
             </button>
           </div>
         </div>
 
         {/* Confirm Password Field */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-1">Confirm Password</label>
+        <div>
+          <label
+            htmlFor="confirmPassword"
+            className="auth-label"
+          >
+            Confirm password
+          </label>
 
-          <div className="relative">
+          <div className="relative mt-1">
             <input
+              id="confirmPassword"
               type={showConfirmPassword ? "text" : "password"}
-              className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none pr-12"
+              className="auth-input pr-12"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               placeholder="Confirm new password"
+              autoComplete="new-password"
             />
 
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+              className="auth-icon-btn"
+              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
             >
               {showConfirmPassword ? (
-                <EyeClosedIcon className="w-5 h-5" />
+                <EyeClosedIcon className="h-5 w-5" />
               ) : (
-                <EyeOpenIcon className="w-5 h-5" />
+                <EyeOpenIcon className="h-5 w-5" />
               )}
             </button>
           </div>
@@ -119,16 +141,12 @@ function ResetPassword() {
         <button
           type="submit"
           disabled={loading}
-          className={`w-full py-3 rounded-lg font-semibold text-white mt-2 transition-all duration-300 ${
-            loading
-              ? "bg-blue-400 cursor-not-allowed"
-              : "bg-[#0a2a66] hover:bg-blue-800 shadow-md"
-          }`}
+          className="auth-primary-btn"
         >
           {loading ? (
             <div className="flex items-center justify-center">
               <svg
-                className="animate-spin mr-2 h-5 w-5 text-white"
+                className="mr-2 h-5 w-5 animate-spin text-white"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -150,26 +168,27 @@ function ResetPassword() {
               Resetting…
             </div>
           ) : (
-            "Reset Password"
+            "Reset password"
           )}
         </button>
 
         {/* Message */}
         {message && (
-          <p
-            className={`mt-5 text-center text-sm ${
+          <div
+            role="status"
+            className={`rounded-2xl px-4 py-3 text-sm ${
               message.includes("✅")
-                ? "text-green-600"
+                ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
                 : message.includes("⚠️")
-                ? "text-yellow-600"
-                : "text-red-600"
+                ? "border border-amber-200 bg-amber-50 text-amber-800"
+                : "border border-red-200 bg-red-50 text-red-800"
             }`}
           >
             {message}
-          </p>
+          </div>
         )}
       </form>
-    </div>
+    </AuthShell>
   );
 }
 

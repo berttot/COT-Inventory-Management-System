@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from "react";
 
 const WeatherCard = () => {
-  const API_KEY = "ab63cdde255709a5b7758b6543442cf8";
-  const CITY = "Malaybalay";
+  const API_KEY = process.env.REACT_APP_OPENWEATHER_API_KEY;
+  const CITY = process.env.REACT_APP_OPENWEATHER_CITY || "Malaybalay";
 
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchWeather = async () => {
+    if (!API_KEY) {
+      console.error("Weather API error: REACT_APP_OPENWEATHER_API_KEY is not set");
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(
         `https://api.openweathermap.org/data/2.5/weather?q=${CITY}&appid=${API_KEY}&units=metric`

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { API_URL } from "../../config/api";
 import {
   LineChart,
   Line,
@@ -19,11 +20,14 @@ import {
   ChevronDown,
   LogOut,
   UserCog,
+  Settings,
   Package,
   Calendar,
   Archive,
   FileText,
 } from "lucide-react";
+import NotificationBell from "../../components/NotificationBell";
+import { cleanupRecaptcha } from "../../utils/cleanupRecaptcha";
 
 
 const SuperAdminDashboard = () => {
@@ -32,13 +36,24 @@ const SuperAdminDashboard = () => {
   const [userName, setUserName] = useState("");
   const [totalUsers, setTotalUsers] = useState(0); 
   const [showLogout, setShowLogout] = useState(false);
-  const [totalRequests, setTotalRequests] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
   const [outOfStock, setOutOfStock] = useState(0);
   const [requestData, setRequestData] = useState([]);
   const [departmentData, setDepartmentData] = useState([]);
   const [chartYear, setChartYear] = useState(new Date().getFullYear());
   const [chartMonth, setChartMonth] = useState("");
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+
+  // Total requests in selected period (year or month) — derived from chart data
+  const totalRequestsInPeriod = (requestData || []).reduce(
+    (sum, d) => sum + (d.requests || 0),
+    0
+  );
+  const totalRequestsLabel = chartMonth
+    ? `In ${new Date(0, parseInt(chartMonth, 10) - 1).toLocaleString("en", { month: "long" })} ${chartYear}`
+    : `In ${chartYear}`;
+
+  const AVAILABLE_REPORTS_COUNT = 2; // System Logs Report + Department Comparison & Most Requested Items
 
   const [logoutLoading, setLogoutLoading] = useState(false); //for logout button, it will disable the button if it clicked it once
 
@@ -53,7 +68,7 @@ const SuperAdminDashboard = () => {
 
     try {
       const token = localStorage.getItem("token");
-      await fetch("http://localhost:5000/api/logs/logout", {
+      await fetch(`${API_URL}/logs/logout`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -76,27 +91,44 @@ const SuperAdminDashboard = () => {
 
 
   useEffect(() => {
+    // Ensure reCAPTCHA cleanup is active on dashboard load
+    cleanupRecaptcha();
+    
     const storedName = localStorage.getItem("userName");
     if (storedName) setUserName(storedName);
   }, []);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      setDashboardLoading(true);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
       try {
-        // Fetch total users
-        const userRes = await fetch("http://localhost:5000/api/users/count");
+        const [userRes, summaryRes] = await Promise.all([
+          fetch(`${API_URL}/users/count`, { signal: controller.signal }),
+          fetch(`${API_URL}/requests/summary`, { signal: controller.signal }),
+        ]);
+
+        if (!userRes.ok) throw new Error("Failed to fetch user count");
         const userData = await userRes.json();
         setTotalUsers(userData.total);
 
-        // Fetch summary stats
-        const summaryRes = await fetch("http://localhost:5000/api/requests/summary");
+        if (!summaryRes.ok) throw new Error("Failed to fetch summary");
         const summaryData = await summaryRes.json();
+        setTotalItems(summaryData.totalItems ?? 0);
+        setOutOfStock(summaryData.outOfStock ?? 0);
 
-        setTotalRequests(summaryData.totalRequests);
-        setTotalItems(summaryData.totalItems);
-        setOutOfStock(summaryData.outOfStock);
+        clearTimeout(timeout);
       } catch (error) {
+        clearTimeout(timeout);
+        if (error.name === "AbortError") {
+          console.warn("Dashboard data fetch timeout - this is normal");
+          return;
+        }
         console.error("Error fetching dashboard data:", error);
+      } finally {
+        setDashboardLoading(false);
       }
     };
 
@@ -105,12 +137,23 @@ const SuperAdminDashboard = () => {
 
   useEffect(() => {
     const fetchChartData = async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       try {
         const monthParam = chartMonth ? `&month=${chartMonth}` : "";
         const [trendsRes, deptRes] = await Promise.all([
-          fetch(`http://localhost:5000/api/requests/trends?year=${chartYear}${monthParam}`),
-          fetch(`http://localhost:5000/api/requests/department-activity?year=${chartYear}${monthParam}`),
+          fetch(`${API_URL}/requests/trends?year=${chartYear}${monthParam}`, {
+            signal: controller.signal,
+          }),
+          fetch(`${API_URL}/requests/department-activity?year=${chartYear}${monthParam}`, {
+            signal: controller.signal,
+          }),
         ]);
+
+        if (!trendsRes.ok || !deptRes.ok) {
+          throw new Error("Failed to fetch chart data");
+        }
 
         const [trendsData, deptData] = await Promise.all([
           trendsRes.json(),
@@ -119,7 +162,15 @@ const SuperAdminDashboard = () => {
 
         setRequestData(trendsData);
         setDepartmentData(deptData);
+        
+        clearTimeout(timeout);
       } catch (error) {
+        clearTimeout(timeout);
+        // Silently handle timeout/abort errors - they're expected and handled by cleanupRecaptcha
+        if (error.name === "AbortError") {
+          console.warn("Chart data fetch timeout - this is normal");
+          return;
+        }
         console.error("Error fetching chart data:", error);
       }
     };
@@ -180,6 +231,14 @@ const SuperAdminDashboard = () => {
           </nav>
         </div>
 
+        {/* Notification Section */}
+        <div className="px-6 py-3 border-t border-white/20">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-gray-300 uppercase tracking-wide">Notifications</span>
+            <NotificationBell />
+          </div>
+        </div>
+
         {/* Bottom User Section */}
         
         <div className="p-5 border-t border-white/20 bg-[#002B7F] flex flex-col items-center">
@@ -202,20 +261,29 @@ const SuperAdminDashboard = () => {
             </button>
           </div>
 
-          {/* Slide-down logout */}
+          {/* Slide-down logout & settings */}
           {showLogout && (
-            <button
-              onClick={handleLogout}
-              disabled={logoutLoading}
-              className={`mt-4 w-full max-w-[220px] py-2 rounded-lg font-medium flex items-center justify-center gap-2
-                ${logoutLoading
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-[#f97316] hover:bg-orange-600 text-white"
-                }`}
-            >
-              <LogOut size={16} />
-              {logoutLoading ? "Logging out..." : "Log Out"}
-            </button>
+            <div className="mt-4 w-full max-w-[220px] flex flex-col gap-2">
+              <button
+                onClick={() => navigate("/super-admin/settings")}
+                className="bg-[#2563eb] text-white py-2 rounded-lg hover:bg-[#1d4ed8] transition font-medium flex items-center justify-center gap-2"
+              >
+                <Settings size={16} />
+                Settings
+              </button>
+              <button
+                onClick={handleLogout}
+                disabled={logoutLoading}
+                className={`w-full max-w-[220px] py-2 rounded-lg font-medium flex items-center justify-center gap-2
+                  ${logoutLoading
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-[#f97316] hover:bg-orange-600 text-white"
+                  }`}
+              >
+                <LogOut size={16} />
+                {logoutLoading ? "Logging out..." : "Log Out"}
+              </button>
+            </div>
           )}
         </div>
       </aside>
@@ -241,7 +309,7 @@ const SuperAdminDashboard = () => {
               Manage Users
             </button>
             <button 
-            onClick={() => navigate("/super-admin/reports")}
+            onClick={() => navigate("/super-admin/requests")}
             className="flex items-center gap-2 bg-[#f97316] text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition shadow-md">
               <BarChart3 size={18} />
               View Reports
@@ -249,29 +317,37 @@ const SuperAdminDashboard = () => {
           </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-4 gap-6 mb-8">
+        {/* Summary Cards — all values from API or derived from chart data */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-2xl shadow-md p-5 border-l-4 border-[#0a2a66] hover:shadow-lg transition">
-            <h2 className="text-gray-500 text-sm">Total Users</h2>
-            <p className="text-3xl font-bold mt-2 text-[#0a2a66]">{totalUsers}</p>
+            <h2 className="text-gray-500 text-sm font-medium">Total Users</h2>
+            <p className="text-3xl font-bold mt-2 text-[#0a2a66]">
+              {dashboardLoading ? "—" : totalUsers}
+            </p>
             <p className="text-sm text-gray-400">Across all departments</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-5 border-l-4 border-[#f97316] hover:shadow-lg transition">
-            <h2 className="text-gray-500 text-sm">Total Requests</h2>
-            <p className="text-3xl font-bold mt-2 text-[#f97316]">{totalRequests}</p>
-            <p className="text-sm text-gray-400">Overall Requests by Departments</p>
+            <h2 className="text-gray-500 text-sm font-medium">Total Requests</h2>
+            <p className="text-3xl font-bold mt-2 text-[#f97316]">
+              {totalRequestsInPeriod}
+            </p>
+            <p className="text-sm text-gray-400">{totalRequestsLabel}</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-5 border-l-4 border-green-500 hover:shadow-lg transition">
-            <h2 className="text-gray-500 text-sm">Total Items</h2>
-            <p className="text-3xl font-bold mt-2 text-green-600">{totalItems}</p>
-            <p className="text-sm text-gray-400">Total Overall Items</p>
+            <h2 className="text-gray-500 text-sm font-medium">Total Items</h2>
+            <p className="text-3xl font-bold mt-2 text-green-600">
+              {dashboardLoading ? "—" : totalItems}
+            </p>
+            <p className="text-sm text-gray-400">In inventory</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-5 border-l-4 border-red-500 hover:shadow-lg transition">
-            <h2 className="text-gray-500 text-sm">Alerts</h2>
-            <p className="text-3xl font-bold mt-2 text-red-500">{outOfStock}</p>
+            <h2 className="text-gray-500 text-sm font-medium">Alerts</h2>
+            <p className="text-3xl font-bold mt-2 text-red-500">
+              {dashboardLoading ? "—" : outOfStock}
+            </p>
             <p className="text-sm text-gray-400">Low stock items</p>
           </div>
         </div>
@@ -363,23 +439,25 @@ const SuperAdminDashboard = () => {
           </div>
         </div>
 
-        {/* Bottom Cards */}
-        <div className="grid grid-cols-3 gap-6">
+        {/* Bottom Cards — dynamic values */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-2xl shadow-md p-5 border-t-4 border-[#0a2a66] hover:shadow-lg transition">
             <h3 className="font-semibold text-gray-700">User Management</h3>
             <p className="text-sm text-gray-500 mb-2">
               Manage user accounts, roles, and permissions
             </p>
-            <p className="text-2xl font-bold text-[#0a2a66]">{totalUsers}</p>
+            <p className="text-2xl font-bold text-[#0a2a66]">
+              {dashboardLoading ? "—" : totalUsers}
+            </p>
             <p className="text-sm text-gray-400">Active Users</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-5 border-t-4 border-[#f97316] hover:shadow-lg transition">
             <h3 className="font-semibold text-gray-700">Global Reports</h3>
             <p className="text-sm text-gray-500 mb-2">
-              Generate comprehensive system reports
+              System Logs Report, Department Comparison & Most Requested Items
             </p>
-            <p className="text-2xl font-bold text-[#f97316]">1</p>
+            <p className="text-2xl font-bold text-[#f97316]">{AVAILABLE_REPORTS_COUNT}</p>
             <p className="text-sm text-gray-400">Available Reports</p>
           </div>
 
@@ -388,8 +466,8 @@ const SuperAdminDashboard = () => {
             <p className="text-sm text-gray-500 mb-2">
               Monitor all system activities and changes
             </p>
-            <p className="text-2xl font-bold text-green-600">24/7</p>
-            <p className="text-sm text-gray-400">Monitoring Activity</p>
+            <p className="text-2xl font-bold text-green-600">Active</p>
+            <p className="text-sm text-gray-400">Monitoring</p>
           </div>
         </div>
       </main>

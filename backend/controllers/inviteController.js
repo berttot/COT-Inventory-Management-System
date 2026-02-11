@@ -1,22 +1,9 @@
 import jwt from "jsonwebtoken";
 import User from "../models/UserModel.js";
-import AuditLog from "../models/AuditLog.js";
 import { sendEmail } from "../utils/email.js";
-import { getWorldTime } from "../utils/getWorldTime.js";
+import { getUserFromHeader } from "../utils/authUtils.js";
+import { recordAudit } from "../utils/auditLogService.js";
 import asyncHandler from "../middleware/asyncHandler.js";
-
-const getUserFromHeader = async (req) => {
-  try {
-    const auth = req.headers.authorization;
-    if (!auth) return null;
-    const token = auth.split(" ")[1];
-    if (!token) return null;
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    return User.findById(decoded.id).select("-password");
-  } catch {
-    return null;
-  }
-};
 
 export const sendInvite = asyncHandler(async (req, res) => {
   const actor = await getUserFromHeader(req);
@@ -60,15 +47,13 @@ export const sendInvite = asyncHandler(async (req, res) => {
     html,
   });
 
-  await AuditLog.create({
+  const actorInfo = actor?.name ? ` Invitation sent by: ${actor.name} (${actor.role}).` : "";
+  await recordAudit(req, {
     userId: actor?._id,
     name: actor?.name,
     role: actor?.role,
     action: "INVITE_USER",
-    details: `Invited ${email} as ${role}${department ? ` (Department: ${department})` : ""}`,
-    timestamp: await getWorldTime(),
-    ipAddress: req.ip,
-    userAgent: req.get("User-Agent"),
+    details: `Invitation email sent to ${email} for role: ${role}${department ? ` | Department: ${department}` : ""}. Registration link expires in 24 hours.${actorInfo}`,
   });
 
   res.json({ message: "Invitation sent successfully!" });
