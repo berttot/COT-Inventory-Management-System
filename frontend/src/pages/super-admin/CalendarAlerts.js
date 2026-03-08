@@ -21,6 +21,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import NotificationBell from "../../components/NotificationBell";
+import { logout } from "../../utils/auth";
 
 const CalendarAlerts = () => {
   const navigate = useNavigate();
@@ -93,25 +94,17 @@ const CalendarAlerts = () => {
   const handleLogout = async () => {
     if (logoutLoading) return;
     setLogoutLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      await fetch(`${API_URL}/logs/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ details: "User signed out via UI" }),
-      });
-    } catch (err) {
-      console.warn("Failed to record logout:", err);
-    } finally {
-      localStorage.removeItem("token");
-      setTimeout(() => {
-        setLogoutLoading(false);
-        navigate("/");
-      }, 300);
-    }
+
+    await logout({
+      recordLogout: true,
+      details: "User signed out via UI",
+      onComplete: () => {
+        setTimeout(() => {
+          setLogoutLoading(false);
+          navigate("/");
+        }, 300);
+      },
+    });
   };
 
   const outOfStock = activeAlerts.filter((a) => a.status === "Out of Stock");

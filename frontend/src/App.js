@@ -1,6 +1,12 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
+// Global error handler for server-down scenarios
+import ServerErrorHandler from "./components/ServerErrorHandler";
+
+// Auth utilities
+import { isAuthenticated, getCurrentRole } from "./utils/auth";
+
 // Auth pages
 import LoginPage from "./pages/auth/LoginPage";
 import Register from "./pages/auth/RegisterUser";
@@ -32,10 +38,8 @@ import SuperAdminSettings from "./pages/super-admin/SuperAdminSettings";
 
 // Decide what to show at "/" based on auth state
 function AuthLanding() {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  const role = typeof window !== "undefined" ? localStorage.getItem("role") : null;
-
-  if (token && role) {
+  if (isAuthenticated()) {
+    const role = getCurrentRole();
     if (role === "superadmin") return <Navigate to="/super-admin" replace />;
     if (role === "departmentadmin") return <Navigate to="/department-admin" replace />;
     if (role === "staff") return <Navigate to="/staff" replace />;
@@ -47,13 +51,12 @@ function AuthLanding() {
 
 // Simple client-side guard based on login + role from localStorage
 function ProtectedRoute({ element, allowedRoles }) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  const role = typeof window !== "undefined" ? localStorage.getItem("role") : null;
-
   // Not logged in → always go back to login
-  if (!token || !role) {
+  if (!isAuthenticated()) {
     return <Navigate to="/" replace />;
   }
+
+  const role = getCurrentRole();
 
   // Logged in but wrong role for this area → bounce to their dashboard
   if (allowedRoles && !allowedRoles.includes(role)) {
@@ -69,6 +72,7 @@ function ProtectedRoute({ element, allowedRoles }) {
 function App() {
   return (
     <Router>
+      <ServerErrorHandler />
       <Routes>
         {/* Auth */}
         <Route path="/" element={<AuthLanding />} />

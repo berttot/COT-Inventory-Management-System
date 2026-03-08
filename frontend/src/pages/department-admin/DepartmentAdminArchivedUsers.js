@@ -15,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { logout } from "../../utils/auth";
 
 const DepartmentAdminArchivedUsers = () => {
   const navigate = useNavigate();
@@ -49,27 +50,16 @@ const DepartmentAdminArchivedUsers = () => {
     if (logoutLoading) return; // ⛔ prevents double click
     setLogoutLoading(true);
 
-    try {
-      const token = localStorage.getItem("token");
-      await fetch(`${API_URL}/logs/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ details: "User signed out via UI" }),
-      });
-    } catch (err) {
-      console.warn("Failed to record logout:", err);
-    } finally {
-      localStorage.removeItem("token");
-
-      // Small delay for better UX
-      setTimeout(() => {
-        setLogoutLoading(false);
-        navigate("/");
-      }, 300);
-    }
+    await logout({
+      recordLogout: true,
+      details: "User signed out via UI",
+      onComplete: () => {
+        setTimeout(() => {
+          setLogoutLoading(false);
+          navigate("/");
+        }, 300);
+      },
+    });
   };
 
 

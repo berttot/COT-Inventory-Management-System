@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { API_URL } from "../../config/api";
+import { logout } from "../../utils/auth";
 import {
   ClipboardList,
   Home,
@@ -109,26 +110,16 @@ const DepartmentAdminDashboard = () => {
     if (logoutLoading) return;
     setLogoutLoading(true);
 
-    try {
-      const token = localStorage.getItem("token");
-      await fetch(`${API_URL}/logs/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ details: "User signed out via UI" }),
-      });
-    } catch (err) {
-      console.warn("Failed to record logout:", err);
-    } finally {
-      localStorage.removeItem("token");
-
-      setTimeout(() => {
-        setLogoutLoading(false);
-        navigate("/");
-      }, 300);
-    }
+    await logout({
+      recordLogout: true,
+      details: "User signed out via UI",
+      onComplete: () => {
+        setTimeout(() => {
+          setLogoutLoading(false);
+          navigate("/");
+        }, 300);
+      },
+    });
   };
 
   const getLinkClass = (path) =>
