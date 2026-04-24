@@ -4,10 +4,9 @@ import User from "../models/UserModel.js";
 import { recordAudit } from "../utils/auditLogService.js";
 import { sendEmail } from "../utils/email.js";
 import { getUserFromHeader } from "../utils/authUtils.js";
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from "../utils/passwordPolicy.js";
+import { isValidFullName, NAME_POLICY_MESSAGE } from "../utils/namePolicy.js";
 import asyncHandler from "../middleware/asyncHandler.js";
-
-const strongRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-const isStrongPassword = (password) => strongRegex.test(password);
 
 let sseClients = [];
 
@@ -31,18 +30,46 @@ export const getUsers = asyncHandler(async (req, res) => {
 });
 
 export const createUser = asyncHandler(async (req, res) => {
-  const { accessID, name, email, role, department, password } = req.body;
+  const { accessID, name, email, role, department, password, inviteToken } = req.body;
 
   if (!email || !password || !accessID || !name || !role || !department) {
     res.status(400);
     throw new Error("All fields are required");
   }
 
+  if (!isValidFullName(name)) {
+    res.status(400);
+    throw new Error(NAME_POLICY_MESSAGE);
+  }
+
+  if (!inviteToken) {
+    res.status(400);
+    throw new Error("Missing invitation token.");
+  }
+
+  let invitePayload;
+  try {
+    invitePayload = jwt.verify(inviteToken, process.env.JWT_SECRET);
+  } catch (err) {
+    res.status(400);
+    if (err.name === "TokenExpiredError") {
+      throw new Error("Invitation link expired. Please request a new invite.");
+    }
+    throw new Error("Invalid invitation link.");
+  }
+
+  if (
+    invitePayload.email !== email ||
+    invitePayload.role !== role ||
+    (invitePayload.department || "") !== (department || "")
+  ) {
+    res.status(400);
+    throw new Error("Invitation details do not match this registration request.");
+  }
+
   if (!isStrongPassword(password)) {
     res.status(400);
-    throw new Error(
-      "Password must be at least 8 characters long and include an uppercase letter, a number, and a special character."
-    );
+    throw new Error(PASSWORD_POLICY_MESSAGE);
   }
 
   const existingUser = await User.findOne({ email });
@@ -104,13 +131,19 @@ export const changePassword = asyncHandler(async (req, res) => {
     throw new Error("User not found");
   }
 
+  if (!isStrongPassword(newPassword)) {
+    res.status(400);
+    throw new Error(PASSWORD_POLICY_MESSAGE);
+  }
+
   const valid = await bcrypt.compare(currentPassword, user.password);
   if (!valid) {
     res.status(401);
     throw new Error("Incorrect current password");
   }
 
-  const hashedNew = await bcrypt.hash(newPassword, 10);
+  const saltRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 10;
+  const hashedNew = await bcrypt.hash(newPassword, saltRounds);
   user.password = hashedNew;
   await user.save();
 
@@ -150,6 +183,11 @@ export const resetPassword = asyncHandler(async (req, res) => {
     throw new Error("User not found.");
   }
 
+  if (!isStrongPassword(newPassword)) {
+    res.status(400);
+    throw new Error(PASSWORD_POLICY_MESSAGE);
+  }
+
   const saltRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 10;
   user.password = await bcrypt.hash(newPassword, saltRounds);
   await user.save();
@@ -169,7 +207,16 @@ export const updateUser = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const updates = { ...req.body };
 
+  if (updates.name !== undefined && !isValidFullName(updates.name)) {
+    res.status(400);
+    throw new Error(NAME_POLICY_MESSAGE);
+  }
+
   if (updates.password) {
+    if (!isStrongPassword(updates.password)) {
+      res.status(400);
+      throw new Error(PASSWORD_POLICY_MESSAGE);
+    }
     const saltRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 10;
     updates.password = await bcrypt.hash(updates.password, saltRounds);
   } else {

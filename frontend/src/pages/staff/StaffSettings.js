@@ -16,16 +16,47 @@ import {
 import SettingsShell from "../../components/SettingsShell";
 import { API_URL } from "../../config/api";
 import { logout } from "../../utils/auth";
+import {
+  getPasswordRequirements,
+  isStrongPassword,
+  PASSWORD_POLICY_MESSAGE,
+  PASSWORD_REQUIREMENTS,
+} from "../../utils/passwordPolicy";
+import {
+  isValidFullName,
+  sanitizeFullNameInput,
+  NAME_POLICY_MESSAGE,
+} from "../../utils/namePolicy";
 
 const StaffSettings = () => {
   const [activeTab, setActiveTab] = useState("editAccount");
   const [user, setUser] = useState({ name: "", email: "", accessID: "", _id: "" });
   const [formData, setFormData] = useState({ name: "", email: "", accessID: "" });
+  const [accountError, setAccountError] = useState("");
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
+  const [requirements, setRequirements] = useState(getPasswordRequirements(""));
+  const [passwordError, setPasswordError] = useState("");
+  const requirementScore = Object.values(requirements).filter(Boolean).length;
+  const strengthLabel =
+    requirementScore <= 1
+      ? "Weak"
+      : requirementScore <= 2
+      ? "Fair"
+      : requirementScore === 3
+      ? "Good"
+      : "Strong";
+  const strengthTone =
+    requirementScore <= 1
+      ? "text-rose-700"
+      : requirementScore <= 2
+      ? "text-amber-700"
+      : requirementScore === 3
+      ? "text-blue-700"
+      : "text-emerald-700";
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -80,7 +111,15 @@ const StaffSettings = () => {
 
   // ✅ Edit account field change
   const handleAccountChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    if (name === "name") {
+      setFormData({ ...formData, [name]: sanitizeFullNameInput(value) });
+      setAccountError("");
+      return;
+    }
+
+    setFormData({ ...formData, [name]: value });
   };
 
   // ✅ Save edited account
@@ -88,6 +127,11 @@ const StaffSettings = () => {
     e.preventDefault();
 
     try {
+      if (!isValidFullName(formData.name)) {
+        setAccountError(NAME_POLICY_MESSAGE);
+        return;
+      }
+
       const updatedFields = {};
       Object.keys(formData).forEach((key) => {
         if (formData[key].trim() && formData[key] !== user[key]) {
@@ -108,6 +152,7 @@ const StaffSettings = () => {
       );
 
       toast.success("Account updated successfully!");
+      setAccountError("");
       localStorage.setItem("user", JSON.stringify(response.data));
       if (response.data.name) localStorage.setItem("userName", response.data.name);
       if (response.data.email) localStorage.setItem("userEmail", response.data.email);
@@ -123,12 +168,23 @@ const StaffSettings = () => {
 
   // ✅ Password input change
   const handlePasswordChange = (e) => {
-    setPasswordData({ ...passwordData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setPasswordData({ ...passwordData, [name]: value });
+
+    if (name === "newPassword") {
+      setRequirements(getPasswordRequirements(value));
+      setPasswordError("");
+    }
   };
 
   // ✅ Change password
   const handleChangePassword = async (e) => {
     e.preventDefault();
+
+    if (!isStrongPassword(passwordData.newPassword)) {
+      setPasswordError(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.warning("New passwords do not match!");
@@ -156,6 +212,8 @@ const StaffSettings = () => {
       if (response.ok) {
         toast.success("Password updated successfully!");
         setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        setRequirements(getPasswordRequirements(""));
+        setPasswordError("");
 
         // ✅ Redirect after success
         setTimeout(() => navigate("/staff"), 1000);
@@ -297,9 +355,16 @@ const StaffSettings = () => {
                     value={formData.name}
                     onChange={handleAccountChange}
                     placeholder="Full Name"
-                    className="settings-input"
+                    className={`settings-input ${accountError ? "border-red-300 focus:border-red-500" : ""}`}
                     autoComplete="name"
+                    aria-invalid={!!accountError}
+                    aria-describedby={accountError ? "account-name-error" : undefined}
                   />
+                  {accountError && (
+                    <p id="account-name-error" className="mt-1.5 text-sm text-red-700">
+                      {accountError}
+                    </p>
+                  )}
                 </div>
 
                 <div className="sm:col-span-2">
@@ -449,6 +514,65 @@ const StaffSettings = () => {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-700">Password requirements</p>
+                  <span className={`text-xs font-semibold ${strengthTone}`}>
+                    {strengthLabel}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-4 gap-1.5">
+                  {[1, 2, 3, 4].map((step) => (
+                    <div
+                      key={step}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        requirementScore >= step
+                          ? requirementScore <= 1
+                            ? "bg-rose-500"
+                            : requirementScore <= 2
+                            ? "bg-amber-500"
+                            : requirementScore === 3
+                            ? "bg-blue-500"
+                            : "bg-emerald-500"
+                          : "bg-slate-200"
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {PASSWORD_REQUIREMENTS.map((req) => (
+                    <div
+                      key={req.key}
+                      className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${
+                        requirements[req.key] ? "bg-emerald-50" : "bg-slate-50"
+                      }`}
+                    >
+                      <div
+                        className={`flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-bold transition-all duration-300 ${
+                          requirements[req.key]
+                            ? "border-emerald-600 bg-emerald-500 text-white"
+                            : "border-slate-300 bg-white text-slate-400"
+                        }`}
+                      >
+                        {requirements[req.key] ? "OK" : "-"}
+                      </div>
+                      <span
+                        className={`text-sm ${
+                          requirements[req.key] ? "text-emerald-700" : "text-slate-600"
+                        }`}
+                      >
+                        {req.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {passwordError && (
+                  <p className="mt-2 text-sm text-red-700">{passwordError}</p>
+                )}
               </div>
 
               <button type="submit" className="settings-primary-btn">
