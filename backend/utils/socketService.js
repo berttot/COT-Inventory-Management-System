@@ -1,5 +1,6 @@
 // utils/socketService.js
 import Item from "../models/ItemModel.js";
+import Request from "../models/RequestModel.js";
 
 let io = null;
 
@@ -17,6 +18,9 @@ export const initializeSocketService = (socketServer) => {
 
   io.on("connection", (socket) => {
     console.log(`✅ Client connected: ${socket.id}`);
+
+    // Push latest pending-request count on connect for superadmin bell freshness.
+    emitRequestAlerts();
 
     socket.on("disconnect", () => {
       console.log(`🔌 Client disconnected: ${socket.id}`);
@@ -68,5 +72,53 @@ export const emitStockAlerts = async () => {
     console.log(`📤 Stock alerts broadcasted: ${payload.total} total alerts`);
   } catch (error) {
     console.error("❌ Error broadcasting stock alerts:", error.message);
+  }
+};
+
+/**
+ * Broadcast real-time pending request updates to all connected clients.
+ * Superadmin UI consumes this for request notifications.
+ */
+export const emitRequestAlerts = async () => {
+  if (!io) {
+    console.warn("⚠️ Socket.io not initialized, skipping request alert broadcast");
+    return;
+  }
+
+  try {
+    const pendingCount = await Request.countDocuments({ status: "Pending" });
+    const latestPending = await Request.find({ status: "Pending" })
+      .sort({ requestedAt: -1, createdAt: -1 })
+      .limit(5)
+      .select("itemName quantity department requestedBy requestedAt")
+      .lean();
+
+    const payload = {
+      pending: pendingCount,
+      latestPending,
+    };
+
+    io.emit("request-alerts", payload);
+    console.log(`📤 Request alerts broadcasted: ${payload.pending} pending`);
+  } catch (error) {
+    console.error("❌ Error broadcasting request alerts:", error.message);
+  }
+};
+
+/**
+ * Broadcast request status updates so staff can receive real-time decisions.
+ * Payload fields: { requestId, userId, status, itemName, quantity, rejectionReason, updatedAt }
+ */
+export const emitRequestStatusUpdate = async (payload) => {
+  if (!io) {
+    console.warn("⚠️ Socket.io not initialized, skipping request status broadcast");
+    return;
+  }
+
+  try {
+    io.emit("request-status-updated", payload);
+    console.log(`📤 Request status update broadcasted: ${payload?.requestId || "unknown"}`);
+  } catch (error) {
+    console.error("❌ Error broadcasting request status update:", error.message);
   }
 };

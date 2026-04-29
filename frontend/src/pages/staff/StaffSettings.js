@@ -40,10 +40,14 @@ const StaffSettings = () => {
   });
   const [requirements, setRequirements] = useState(getPasswordRequirements(""));
   const [passwordError, setPasswordError] = useState("");
+  const [accountNotice, setAccountNotice] = useState({ type: "", message: "" });
+  const [passwordNotice, setPasswordNotice] = useState({ type: "", message: "" });
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
   const requirementScore = Object.values(requirements).filter(Boolean).length;
   const strengthLabel =
     requirementScore <= 1
-      ? "Weak"
+      ? "Needs improvement"
       : requirementScore <= 2
       ? "Fair"
       : requirementScore === 3
@@ -112,6 +116,7 @@ const StaffSettings = () => {
   // ✅ Edit account field change
   const handleAccountChange = (e) => {
     const { name, value } = e.target;
+    setAccountNotice({ type: "", message: "" });
 
     if (name === "name") {
       setFormData({ ...formData, [name]: sanitizeFullNameInput(value) });
@@ -125,10 +130,13 @@ const StaffSettings = () => {
   // ✅ Save edited account
   const handleSaveAccount = async (e) => {
     e.preventDefault();
+    setAccountNotice({ type: "", message: "" });
+    setSavingAccount(true);
 
     try {
       if (!isValidFullName(formData.name)) {
         setAccountError(NAME_POLICY_MESSAGE);
+        setAccountNotice({ type: "error", message: "Please correct your full name format." });
         return;
       }
 
@@ -141,6 +149,7 @@ const StaffSettings = () => {
 
       if (Object.keys(updatedFields).length === 0) {
         toast.info("No changes detected.");
+        setAccountNotice({ type: "info", message: "No changes detected." });
         return;
       }
 
@@ -152,6 +161,7 @@ const StaffSettings = () => {
       );
 
       toast.success("Account updated successfully!");
+      setAccountNotice({ type: "success", message: "Account updated successfully." });
       setAccountError("");
       localStorage.setItem("user", JSON.stringify(response.data));
       if (response.data.name) localStorage.setItem("userName", response.data.name);
@@ -163,6 +173,9 @@ const StaffSettings = () => {
     } catch (err) {
       console.error(err);
       toast.error("Failed to update account.");
+      setAccountNotice({ type: "error", message: "Failed to update account. Please try again." });
+    } finally {
+      setSavingAccount(false);
     }
   };
 
@@ -170,6 +183,7 @@ const StaffSettings = () => {
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
     setPasswordData({ ...passwordData, [name]: value });
+    setPasswordNotice({ type: "", message: "" });
 
     if (name === "newPassword") {
       setRequirements(getPasswordRequirements(value));
@@ -180,16 +194,21 @@ const StaffSettings = () => {
   // ✅ Change password
   const handleChangePassword = async (e) => {
     e.preventDefault();
+    setPasswordNotice({ type: "", message: "" });
 
     if (!isStrongPassword(passwordData.newPassword)) {
       setPasswordError(PASSWORD_POLICY_MESSAGE);
+      setPasswordNotice({ type: "error", message: "Your new password does not meet all requirements." });
       return;
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.warning("New passwords do not match!");
+      setPasswordNotice({ type: "error", message: "New password and confirmation do not match." });
       return;
     }
+
+    setUpdatingPassword(true);
 
     try {
       const userEmail =
@@ -211,6 +230,7 @@ const StaffSettings = () => {
 
       if (response.ok) {
         toast.success("Password updated successfully!");
+        setPasswordNotice({ type: "success", message: "Password updated successfully." });
         setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
         setRequirements(getPasswordRequirements(""));
         setPasswordError("");
@@ -219,15 +239,19 @@ const StaffSettings = () => {
         setTimeout(() => navigate("/staff"), 1000);
       } else {
         toast.error(data.message || "Failed to update password");
+        setPasswordNotice({ type: "error", message: data.message || "Failed to update password." });
       }
     } catch (err) {
       console.error(err);
       toast.error("Server error. Try again later.");
+      setPasswordNotice({ type: "error", message: "Server error. Try again later." });
+    } finally {
+      setUpdatingPassword(false);
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-900">
+    <div className="flex h-screen bg-slate-100 text-slate-900">
       {/* Sidebar (matches staff portal) */}
       <aside className="w-64 bg-[#002B7F] text-white flex flex-col justify-between shadow-lg">
         <div className="p-6">
@@ -306,27 +330,28 @@ const StaffSettings = () => {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto">
-        <SettingsShell
-          title="Settings"
-          subtitle="Update your personal details and secure your account."
-          roleLabel="Staff"
-          user={formData}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          tabs={[
-            {
-              id: "editAccount",
-              label: "Edit account",
-              description: "Name, email, and access ID",
-            },
-            {
-              id: "changePassword",
-              label: "Password",
-              description: "Update your password",
-            },
-          ]}
-        >
+      <main className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+        <div className="mx-auto max-w-7xl">
+          <SettingsShell
+            title="Settings"
+            subtitle="Update your personal details and secure your account."
+            roleLabel="Staff"
+            user={formData}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            tabs={[
+              {
+                id: "editAccount",
+                label: "Edit account",
+                description: "Name, email, and access ID",
+              },
+              {
+                id: "changePassword",
+                label: "Password",
+                description: "Update your password",
+              },
+            ]}
+          >
           {activeTab === "editAccount" && (
             <form onSubmit={handleSaveAccount} className="space-y-5">
               <div className="flex items-start justify-between gap-4">
@@ -399,8 +424,24 @@ const StaffSettings = () => {
                 </div>
               </div>
 
-              <button type="submit" className="settings-primary-btn">
-                Save changes
+              {accountNotice.message && (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className={`rounded-xl border px-3 py-2 text-sm ${
+                    accountNotice.type === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : accountNotice.type === "error"
+                      ? "border-red-200 bg-red-50 text-red-800"
+                      : "border-blue-200 bg-blue-50 text-blue-800"
+                  }`}
+                >
+                  {accountNotice.message}
+                </p>
+              )}
+
+              <button type="submit" className="settings-primary-btn" disabled={savingAccount}>
+                {savingAccount ? "Saving changes..." : "Save changes"}
               </button>
             </form>
           )}
@@ -433,7 +474,7 @@ const StaffSettings = () => {
                     placeholder="Current Password"
                     value={passwordData.currentPassword}
                     onChange={handlePasswordChange}
-                    className="settings-input pr-12"
+                    className="settings-input pr-14"
                     required
                     autoComplete="current-password"
                   />
@@ -465,7 +506,7 @@ const StaffSettings = () => {
                       placeholder="New Password"
                       value={passwordData.newPassword}
                       onChange={handlePasswordChange}
-                      className="settings-input pr-12"
+                      className="settings-input pr-14"
                       required
                       autoComplete="new-password"
                     />
@@ -496,7 +537,7 @@ const StaffSettings = () => {
                       placeholder="Confirm New Password"
                       value={passwordData.confirmPassword}
                       onChange={handlePasswordChange}
-                      className="settings-input pr-12"
+                      className="settings-input pr-14"
                       required
                       autoComplete="new-password"
                     />
@@ -519,7 +560,7 @@ const StaffSettings = () => {
               <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur-sm">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-slate-700">Password requirements</p>
-                  <span className={`text-xs font-semibold ${strengthTone}`}>
+                  <span role="status" aria-live="polite" className={`text-xs font-semibold ${strengthTone}`}>
                     {strengthLabel}
                   </span>
                 </div>
@@ -562,7 +603,7 @@ const StaffSettings = () => {
                       </div>
                       <span
                         className={`text-sm ${
-                          requirements[req.key] ? "text-emerald-700" : "text-slate-600"
+                          requirements[req.key] ? "text-emerald-700" : "text-slate-700"
                         }`}
                       >
                         {req.label}
@@ -575,12 +616,27 @@ const StaffSettings = () => {
                 )}
               </div>
 
-              <button type="submit" className="settings-primary-btn">
-                Update password
+              {passwordNotice.message && (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className={`rounded-xl border px-3 py-2 text-sm ${
+                    passwordNotice.type === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-red-200 bg-red-50 text-red-800"
+                  }`}
+                >
+                  {passwordNotice.message}
+                </p>
+              )}
+
+              <button type="submit" className="settings-primary-btn" disabled={updatingPassword}>
+                {updatingPassword ? "Updating password..." : "Update password"}
               </button>
             </form>
           )}
-        </SettingsShell>
+          </SettingsShell>
+        </div>
       </main>
     </div>
   );

@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { io } from "socket.io-client";
 import { Bell, AlertCircle, AlertTriangle, ChevronRight } from "lucide-react";
-import { API_URL, API_BASE } from "../config/api";
+import { API_BASE } from "../config/api";
+import { apiFetch } from "../utils/api";
 
 const POLL_INTERVAL_MS = 120000; // 2 minutes fallback
 
@@ -14,8 +15,10 @@ const POLL_INTERVAL_MS = 120000; // 2 minutes fallback
  * - Falls back to polling if socket disconnects
  */
 const NotificationBell = () => {
-  const [count, setCount] = useState({ total: 0, outOfStock: 0, lowStock: 0 });
+  const [stockCount, setStockCount] = useState({ total: 0, outOfStock: 0, lowStock: 0 });
   const [alerts, setAlerts] = useState([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [pendingRequests, setPendingRequests] = useState([]);
   const [open, setOpen] = useState(false);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
   const containerRef = useRef(null);
@@ -26,13 +29,12 @@ const NotificationBell = () => {
 
   const fetchCount = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/calendar/alert-count`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await apiFetch(`/calendar/alert-count`, {
+        method: "GET",
       });
       const data = await res.json();
       if (res.ok) {
-        setCount({
+        setStockCount({
           total: data.total ?? 0,
           outOfStock: data.outOfStock ?? 0,
           lowStock: data.lowStock ?? 0,
@@ -46,9 +48,8 @@ const NotificationBell = () => {
   const fetchAlerts = useCallback(async () => {
     setLoadingAlerts(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/calendar/alert-summary`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await apiFetch(`/calendar/alert-summary`, {
+        method: "GET",
       });
       const data = await res.json();
       if (res.ok) setAlerts(data.activeAlerts || []);
@@ -60,21 +61,63 @@ const NotificationBell = () => {
     }
   }, []);
 
+  const fetchPendingRequestCount = useCallback(async () => {
+    try {
+      const res = await apiFetch(`/requests/alerts/pending-count`, {
+        method: "GET",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPendingCount(data.pending ?? 0);
+      }
+    } catch (error) {
+      console.warn("Failed to fetch pending request count:", error);
+    }
+  }, []);
+
+  const fetchPendingRequestSummary = useCallback(async () => {
+    try {
+      const res = await apiFetch(`/requests/alerts/pending-summary?limit=5`, {
+        method: "GET",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPendingRequests(data.pendingRequests || []);
+      }
+    } catch (error) {
+      console.warn("Failed to fetch pending request summary:", error);
+      setPendingRequests([]);
+    }
+  }, []);
+
+  const totalBellCount = (stockCount.total || 0) + (pendingCount || 0);
+
   // Socket.io connection and polling
   useEffect(() => {
     fetchCount();
+    fetchPendingRequestCount();
 
     socketRef.current = io(API_BASE, { autoConnect: true });
 
     socketRef.current.on("stock-alerts", (payload) => {
-      setCount({
+      setStockCount({
         total: payload.total ?? 0,
         outOfStock: payload.outOfStock ?? 0,
         lowStock: payload.lowStock ?? 0,
       });
     });
 
-    const pollInterval = setInterval(fetchCount, POLL_INTERVAL_MS);
+    socketRef.current.on("request-alerts", (payload) => {
+      setPendingCount(payload.pending ?? 0);
+      if (Array.isArray(payload.latestPending)) {
+        setPendingRequests(payload.latestPending);
+      }
+    });
+
+    const pollInterval = setInterval(() => {
+      fetchCount();
+      fetchPendingRequestCount();
+    }, POLL_INTERVAL_MS);
 
     return () => {
       if (socketRef.current) {
@@ -82,12 +125,15 @@ const NotificationBell = () => {
       }
       clearInterval(pollInterval);
     };
-  }, [fetchCount]);
+  }, [fetchCount, fetchPendingRequestCount]);
 
   // Fetch alerts when dropdown opens
   useEffect(() => {
-    if (open) fetchAlerts();
-  }, [open, fetchAlerts]);
+    if (open) {
+      fetchAlerts();
+      fetchPendingRequestSummary();
+    }
+  }, [open, fetchAlerts, fetchPendingRequestSummary]);
 
   const updateDropdownPosition = useCallback(() => {
     const btn = buttonRef.current;
@@ -145,12 +191,12 @@ const NotificationBell = () => {
         ref={buttonRef}
         onClick={() => setOpen(!open)}
         className="relative p-2 text-white rounded-lg transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30"
-        aria-label={`Stock alerts${count.total > 0 ? ` (${count.total})` : ""}`}
+        aria-label={`Notifications${totalBellCount > 0 ? ` (${totalBellCount})` : ""}`}
       >
         <Bell size={20} strokeWidth={2} />
-        {count.total > 0 && (
+        {totalBellCount > 0 && (
           <span className="absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white shadow-sm animate-pulse">
-            {count.total > 99 ? "99+" : count.total}
+            {totalBellCount > 99 ? "99+" : totalBellCount}
           </span>
         )}
       </button>
@@ -166,21 +212,21 @@ const NotificationBell = () => {
               transform: "translateX(-50%)",
             }}
             role="dialog"
-            aria-label="Stock alerts"
+            aria-label="Notifications"
           >
             <div className="border-b border-gray-100 bg-gradient-to-r from-[#0a2a66] to-[#002B7F] px-4 py-3 text-white shrink-0">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-sm">Stock Alerts</h3>
-                {count.total > 0 && (
+                <h3 className="font-semibold text-sm">Notifications</h3>
+                {totalBellCount > 0 && (
                   <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                    {count.total}
+                    {totalBellCount}
                   </span>
                 )}
               </div>
               <p className="text-xs opacity-90 mt-1">
-                {count.total === 0
-                  ? "No active alerts"
-                  : `${count.outOfStock} out of stock · ${count.lowStock} low stock`}
+                {totalBellCount === 0
+                  ? "No active notifications"
+                  : `${pendingCount} pending requests · ${stockCount.outOfStock} out of stock · ${stockCount.lowStock} low stock`}
               </p>
             </div>
 
@@ -195,61 +241,112 @@ const NotificationBell = () => {
                 <div className="flex items-center justify-center py-8">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#0a2a66] border-t-transparent" />
                 </div>
-              ) : alerts.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-gray-500">
-                  {count.total === 0
-                    ? "All items are in good stock."
-                    : "No alerts to display."}
-                </div>
               ) : (
-                <ul className="divide-y divide-gray-50">
-                  {alerts.slice(0, 5).map((item) => (
-                    <li
-                      key={item._id}
-                      className="px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <div
-                          className={`mt-0.5 p-1.5 rounded-full shrink-0 ${
-                            item.status === "Out of Stock"
-                              ? "bg-red-50"
-                              : "bg-amber-50"
-                          }`}
+                <>
+                  <div className="px-3 pt-3 pb-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Pending Staff Requests
+                    </p>
+                  </div>
+                  {pendingRequests.length === 0 ? (
+                    <div className="px-4 py-3 text-xs text-gray-500">No pending requests.</div>
+                  ) : (
+                    <ul className="divide-y divide-gray-50 mb-2">
+                      {pendingRequests.slice(0, 5).map((req, index) => (
+                        <li key={`${req._id || "pending"}-${index}`} className="px-3 py-2.5 hover:bg-gray-50 transition-colors">
+                          <div className="flex items-start gap-2.5">
+                            <div className="mt-0.5 p-1.5 rounded-full shrink-0 bg-blue-50">
+                              <Bell className="h-3.5 w-3.5 text-blue-500" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 leading-snug line-clamp-2">
+                                {req.itemName}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {req.requestedBy} · {req.department}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                Qty: {req.quantity}
+                              </p>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="px-3 pt-1 pb-1 border-t border-gray-100">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Stock Alerts
+                    </p>
+                  </div>
+                  {alerts.length === 0 ? (
+                    <div className="px-4 py-3 text-xs text-gray-500">
+                      {stockCount.total === 0
+                        ? "All items are in good stock."
+                        : "No stock alerts to display."}
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-gray-50">
+                      {alerts.slice(0, 5).map((item) => (
+                        <li
+                          key={item._id}
+                          className="px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer"
                         >
-                          {item.status === "Out of Stock" ? (
-                            <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-                          ) : (
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-gray-900 leading-snug line-clamp-2">
-                            {item.name}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {item.category}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            Qty: {item.quantity} {item.unit}
-                          </p>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                          <div className="flex items-start gap-2.5">
+                            <div
+                              className={`mt-0.5 p-1.5 rounded-full shrink-0 ${
+                                item.status === "Out of Stock"
+                                  ? "bg-red-50"
+                                  : "bg-amber-50"
+                              }`}
+                            >
+                              {item.status === "Out of Stock" ? (
+                                <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                              ) : (
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 leading-snug line-clamp-2">
+                                {item.name}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {item.category}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                Qty: {item.quantity} {item.unit}
+                              </p>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
 
-            {alerts.length > 0 && (
+            {(alerts.length > 0 || pendingRequests.length > 0) && (
               <div className="border-t border-gray-100 bg-gray-50/80 px-3 py-2 shrink-0">
-                <Link
-                  to="/super-admin/calendar-alerts"
-                  onClick={() => setOpen(false)}
-                  className="flex items-center justify-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold text-[#0a2a66] hover:bg-white hover:shadow-sm transition-all"
-                >
-                  View all alerts
-                  <ChevronRight size={14} />
-                </Link>
+                <div className="grid grid-cols-2 gap-2">
+                  <Link
+                    to="/super-admin/requests?status=pending"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center justify-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold text-[#0a2a66] hover:bg-white hover:shadow-sm transition-all"
+                  >
+                    View requests
+                    <ChevronRight size={14} />
+                  </Link>
+                  <Link
+                    to="/super-admin/calendar-alerts"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center justify-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold text-[#0a2a66] hover:bg-white hover:shadow-sm transition-all"
+                  >
+                    View stock alerts
+                    <ChevronRight size={14} />
+                  </Link>
+                </div>
               </div>
             )}
             {/* Arrow pointing down to button */}

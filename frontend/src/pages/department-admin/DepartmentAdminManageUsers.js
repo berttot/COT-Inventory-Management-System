@@ -265,68 +265,75 @@ const DepartmentAdminManageUsers = () => {
   const showingFrom = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const showingTo = Math.min(total, safePage * pageSize);
 
+  const summaryStats = useMemo(() => {
+    return {
+      total: filteredUsers.length,
+      visible: pagedUsers.length,
+    };
+  }, [filteredUsers, pagedUsers]);
+
   // ✅ Render staff table
   const renderTable = (data) => (
-    <div className="bg-white rounded-2xl shadow-md border border-gray-200 mb-8 overflow-hidden">
-      <div className="px-6 py-3 border-b bg-[#002B7F]">
+    <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-slate-50/80 px-6 py-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-lg font-semibold text-white">
-            {department} Department - Staff Members
+          <h3 className="text-lg font-semibold text-[#0a2a66]">
+            Staff Members
           </h3>
-          <div className="text-xs text-white/80">
-            Showing <span className="font-semibold text-white">{showingFrom}</span>–<span className="font-semibold text-white">{showingTo}</span> of{" "}
-            <span className="font-semibold text-white">{total}</span>
+          <div className="text-xs text-slate-600">
+            Showing <span className="font-semibold text-slate-800">{showingFrom}</span>-<span className="font-semibold text-slate-800">{showingTo}</span> of{" "}
+            <span className="font-semibold text-slate-800">{total}</span>
           </div>
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-left min-w-[720px]">
-          <thead className="bg-gray-100 border-b">
+        <table className="w-full min-w-[720px] text-left">
+          <thead className="border-b border-slate-200 bg-slate-50/70">
           <tr>
-            <th className="p-3 text-sm font-semibold text-gray-600 uppercase">
+            <th className="p-3 text-xs font-semibold uppercase tracking-wider text-slate-600">
               <button
                 type="button"
                 onClick={() => requestSort("accessID")}
-                className="inline-flex items-center hover:text-gray-900"
+                className="inline-flex items-center hover:text-slate-900"
                 aria-label="Sort by access ID"
               >
                 Access ID{sortIndicator("accessID")}
               </button>
             </th>
-            <th className="p-3 text-sm font-semibold text-gray-600 uppercase">
+            <th className="p-3 text-xs font-semibold uppercase tracking-wider text-slate-600">
               <button
                 type="button"
                 onClick={() => requestSort("name")}
-                className="inline-flex items-center hover:text-gray-900"
+                className="inline-flex items-center hover:text-slate-900"
                 aria-label="Sort by name"
               >
                 Name{sortIndicator("name")}
               </button>
             </th>
-            <th className="p-3 text-sm font-semibold text-gray-600 uppercase">
+            <th className="p-3 text-xs font-semibold uppercase tracking-wider text-slate-600">
               <button
                 type="button"
                 onClick={() => requestSort("email")}
-                className="inline-flex items-center hover:text-gray-900"
+                className="inline-flex items-center hover:text-slate-900"
                 aria-label="Sort by email"
               >
                 Email{sortIndicator("email")}
               </button>
             </th>
-            <th className="p-3 text-sm font-semibold text-gray-600 uppercase text-center">Actions</th>
+            <th className="p-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-600">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-slate-100">
           {data.length > 0 ? (
             data.map((user) => (
-              <tr key={user._id} className="border-b hover:bg-blue-50 transition duration-150">
-                <td className="p-3 font-medium text-gray-700">{user.accessID}</td>
-                <td className="p-3 text-gray-700">{user.name}</td>
-                <td className="p-3 text-gray-700">{user.email}</td>
+              <tr key={user._id} className="transition-colors hover:bg-slate-50/60">
+                <td className="p-3 font-medium text-slate-700">{user.accessID}</td>
+                <td className="p-3 text-slate-700">{user.name}</td>
+                <td className="p-3 text-slate-700">{user.email || "-"}</td>
                 <td className="p-3 text-center">
                   <button
                     onClick={() => openArchiveConfirm(user)}
-                    className="text-orange-600 hover:text-orange-800"
+                    className="rounded-md p-1.5 text-[#f97316] transition hover:bg-orange-50 hover:text-[#ea580c]"
                     title="Archive staff"
                     aria-label={`Archive ${user.name || user.accessID || "staff member"}`}
                   >
@@ -337,7 +344,7 @@ const DepartmentAdminManageUsers = () => {
             ))
           ) : (
             <tr>
-              <td colSpan="4" className="text-center py-8 text-gray-500 italic">
+              <td colSpan="4" className="py-10 text-center italic text-slate-500">
                 {search.trim()
                   ? "No staff match your search."
                   : "No staff found in your department. Invite one to get started."}
@@ -349,13 +356,13 @@ const DepartmentAdminManageUsers = () => {
       </div>
 
       {/* Pagination */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-6 py-4 border-t bg-white">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
+      <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-sm text-slate-600">
           <span>Rows per page</span>
           <select
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
-            className="border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="rounded-lg border border-slate-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#002B7F]/20"
             aria-label="Rows per page"
           >
             {[10, 25, 50].map((n) => (
@@ -371,19 +378,19 @@ const DepartmentAdminManageUsers = () => {
             type="button"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={safePage <= 1}
-            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
             Prev
           </button>
-          <div className="text-sm text-gray-600">
-            Page <span className="font-semibold text-gray-800">{safePage}</span> of{" "}
-            <span className="font-semibold text-gray-800">{totalPages}</span>
+          <div className="text-sm text-slate-600">
+            Page <span className="font-semibold text-slate-800">{safePage}</span> of{" "}
+            <span className="font-semibold text-slate-800">{totalPages}</span>
           </div>
           <button
             type="button"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={safePage >= totalPages}
-            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
             Next
           </button>
@@ -394,7 +401,7 @@ const DepartmentAdminManageUsers = () => {
 
   // --- UI ---
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-slate-100 text-slate-900">
       {/* Sidebar */}
       <aside className="w-64 bg-[#002B7F] text-white flex flex-col justify-between shadow-lg">
         <div className="p-6">
@@ -427,8 +434,8 @@ const DepartmentAdminManageUsers = () => {
             <div className="flex items-center gap-2">
               <User size={22} className="opacity-80" />
               <div>
-                <p className="text-sm font-medium text-white mb-1">{userName}</p>
-                <p className="text-xs opacity-70 text-white mb-3">{department}</p>
+                <p className="text-sm font-medium text-white mb-1">{userName || "Department Admin"}</p>
+                <p className="text-xs opacity-70 text-white mb-3">{department || "Department"}</p>
               </div>
             </div>
 
@@ -446,7 +453,7 @@ const DepartmentAdminManageUsers = () => {
             <div className="mt-4 w-full max-w-[220px] flex flex-col gap-2">
               <button
                 onClick={() => navigate("/department-admin/settings")}
-                className="bg-[#2563eb] text-white py-2 rounded-lg hover:bg-[#1d4ed8] transition font-medium flex items-center justify-center gap-2 mb-1"
+                className="bg-[#2563eb] text-white py-2 rounded-lg hover:bg-[#1d4ed8] transition font-medium flex items-center justify-center gap-2"
               >
                 <Settings size={16} />
                 Settings
@@ -470,84 +477,119 @@ const DepartmentAdminManageUsers = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-3xl font-bold text-[#0a2a66] flex items-center gap-2">
-              <User size={26} /> Manage Users
-            </h2>
-            <p className="text-gray-600">
-              Add, update, or remove staff and assign roles.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <button
-              onClick={() => setShowModal(true)}
-              className="flex items-center gap-2 bg-[#0a2a66] text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-            >
-              <PlusCircle size={18} /> Add Staff
-            </button>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search staff..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 pr-10 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm w-72"
-                aria-label="Search staff by name, email, or access ID"
-              />
-              <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
-              {search.trim() && (
+      <main className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <header className="overflow-hidden rounded-3xl border border-[#dbe7ff] bg-gradient-to-br from-white to-[#f6f9ff] shadow-sm">
+            <div className="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)] lg:items-center">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-[#002B7F] md:text-3xl">
+                    <User size={24} /> Manage Staff
+                  </h1>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    {summaryStats.total} staff
+                  </span>
+                </div>
+                <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                  Invite and manage staff members within {department || "your department"} while keeping records organized.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-[#cfe1ff] bg-[#e7f0ff] px-3 py-1 text-xs font-semibold text-[#1d4ed8]">
+                    Department: {department || "-"}
+                  </span>
+                  <span className="rounded-full border border-[#dbe7ff] bg-[#eef4ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                    Total: {summaryStats.total}
+                  </span>
+                  <span className="rounded-full border border-[#f5e1c5] bg-[#fff7ed] px-3 py-1 text-xs font-semibold text-[#9a3412]">
+                    Visible: {summaryStats.visible}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[#dbe7ff] bg-[#f8fbff] p-4">
+                <div className="text-sm font-semibold uppercase tracking-wide text-slate-700">
+                  Staff Controls
+                </div>
+                <p className="mt-2 text-sm text-slate-500">
+                  Send invitation links to onboard staff to your department.
+                </p>
                 <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-2 p-1 rounded hover:bg-gray-100 text-gray-500"
-                  aria-label="Clear search"
-                  title="Clear"
+                  onClick={() => setShowModal(true)}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0a2a66] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0b347a]"
                 >
-                  <X size={16} />
+                  <PlusCircle size={16} />
+                  Add Staff
                 </button>
-              )}
+              </div>
+            </div>
+          </header>
+
+          <div className="rounded-3xl border border-[#dbe7ff] bg-gradient-to-br from-white to-[#f8fbff] p-4 shadow-sm">
+            <div className="grid gap-4">
+              <label className="relative block">
+                <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or access ID..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full rounded-2xl border border-[#dbe7ff] bg-white py-3 pl-10 pr-10 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-[#002B7F] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#002B7F]/15"
+                  aria-label="Search staff by name, email, or access ID"
+                />
+                {search.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute right-2 top-2 rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100"
+                    aria-label="Clear search"
+                    title="Clear"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </label>
             </div>
           </div>
-        </div>
 
         {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <Loader2 className="animate-spin text-blue-600" size={36} />
-            <span className="ml-3 text-gray-600 text-lg">Loading staff...</span>
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="animate-spin text-[#0a2a66]" size={32} />
+              <span className="ml-3 text-base text-slate-600">Loading staff...</span>
+            </div>
           </div>
         ) : fetchError ? (
-          <div className="bg-white border border-red-100 rounded-2xl p-6 text-red-700 shadow-sm">
-            <p className="font-semibold mb-1">Couldn’t load staff</p>
-            <p className="text-sm text-red-600">{fetchError}</p>
+          <div className="rounded-2xl border border-red-200 bg-red-50/60 p-6 text-red-700 shadow-sm">
+            <p className="mb-1 font-semibold">Couldn’t load staff</p>
+            <p className="text-sm text-red-700">{fetchError}</p>
           </div>
         ) : (
           renderTable(pagedUsers)
         )}
+        </div>
       </main>
 
       {/* --- ADD STAFF MODAL --- */}
       {showModal && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
           onClick={() => !sendingInvite && setShowModal(false)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="invite-staff-title"
         >
           <div
-            className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md"
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <h2 id="invite-staff-title" className="text-2xl font-bold">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <h2 id="invite-staff-title" className="text-xl font-bold text-[#0a2a66]">
                 Invite Staff
               </h2>
               <button
                 type="button"
                 onClick={() => !sendingInvite && setShowModal(false)}
-                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+                className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100"
                 aria-label="Close invite modal"
                 title="Close"
               >
@@ -563,7 +605,7 @@ const DepartmentAdminManageUsers = () => {
                 onChange={handleChange}
                 required
                 autoFocus
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800 focus:border-[#002B7F] focus:outline-none focus:ring-2 focus:ring-[#002B7F]/20"
               />
 
               <div className="flex justify-end gap-3 pt-4">
@@ -571,17 +613,17 @@ const DepartmentAdminManageUsers = () => {
                   type="button"
                   onClick={() => setShowModal(false)}
                   disabled={sendingInvite}
-                  className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100"
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700 transition hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={sendingInvite}
-                  className={`px-4 py-2 rounded-lg text-white ${
+                  className={`rounded-lg px-4 py-2 text-white ${
                     sendingInvite
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700"
+                      ? "cursor-not-allowed bg-slate-400"
+                      : "bg-[#0a2a66] hover:bg-[#0b347a]"
                   }`}
                 >
                   {sendingInvite ? "Sending Invite..." : "Send Invite"}
@@ -595,33 +637,33 @@ const DepartmentAdminManageUsers = () => {
       {/* --- ARCHIVE CONFIRMATION (replaces window.confirm) --- */}
       {archiveConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
           onClick={() => !archiving && setArchiveConfirm(null)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="archive-staff-dialog-title"
         >
           <div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-gray-100"
+            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 mb-4">
+            <div className="mb-4 flex items-center gap-3">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
                 <Archive size={24} />
               </div>
-              <h2 id="archive-staff-dialog-title" className="text-xl font-semibold text-gray-800">
+              <h2 id="archive-staff-dialog-title" className="text-xl font-semibold text-slate-800">
                 Archive staff?
               </h2>
             </div>
-            <p className="text-gray-600 text-sm mb-6">
+            <p className="mb-6 text-sm text-slate-600">
               Are you sure you want to archive <strong>{archiveConfirm.name}</strong>? They can be restored later from Archived Staff.
             </p>
-            <div className="flex gap-3 justify-end">
+            <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => !archiving && setArchiveConfirm(null)}
                 disabled={archiving}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -629,7 +671,7 @@ const DepartmentAdminManageUsers = () => {
                 type="button"
                 onClick={handleArchiveStaff}
                 disabled={archiving}
-                className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 flex items-center gap-2"
+                className="flex items-center gap-2 rounded-lg bg-[#f97316] px-4 py-2 text-white transition hover:bg-orange-600 disabled:opacity-50"
               >
                 {archiving ? (
                   <>

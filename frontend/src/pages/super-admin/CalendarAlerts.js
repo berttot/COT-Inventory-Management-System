@@ -137,7 +137,7 @@ const CalendarAlerts = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-900">
+    <div className="flex h-screen bg-slate-100 text-slate-900">
       {/* Sidebar */}
       <aside className="w-64 bg-[#002B7F] text-white flex flex-col justify-between shadow-lg">
         <div className="p-6">
@@ -147,6 +147,9 @@ const CalendarAlerts = () => {
           <nav className="space-y-2">
             <Link to="/super-admin" className={getLinkClass("/super-admin")}>
               <Home size={18} /> Dashboard
+            </Link>
+            <Link to="/super-admin/manage-users" className={getLinkClass("/super-admin/manage-users")}>
+              <UserCog size={18} /> Manage Users
             </Link>
             <Link to="/super-admin/requests" className={getLinkClass("/super-admin/requests")}>
               <ClipboardList size={18} /> Request Log
@@ -211,183 +214,175 @@ const CalendarAlerts = () => {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-[#0a2a66] mb-2">Calendar Alerts</h1>
-            <p className="text-gray-600">
-              Active stock alerts and recent activity. Get notified when items are low, out of stock, or restocked.
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={includeArchived}
-                onChange={(e) => setIncludeArchived(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              Include archived items
-            </label>
-            <button
-              onClick={fetchAlertSummary}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-[#0a2a66] text-white rounded-lg hover:bg-[#082554] transition disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-              Refresh
-            </button>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <RefreshCw className="w-10 h-10 text-[#0a2a66] animate-spin" />
-          </div>
-        ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700">
-            <p className="font-medium">Failed to load alerts</p>
-            <p className="text-sm mt-1">{error}</p>
-          </div>
-        ) : (
-          <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-              <div className="bg-white rounded-xl shadow-sm border border-red-100 p-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                    <AlertCircle className="w-6 h-6 text-red-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Out of Stock</p>
-                    <p className="text-2xl font-bold text-red-600">{outOfStock.length}</p>
-                    <p className="text-xs text-gray-500">Items need immediate restock</p>
-                  </div>
+      <main className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <header className="overflow-hidden rounded-3xl border border-[#dbe7ff] bg-gradient-to-br from-white to-[#f6f9ff] shadow-sm">
+            <div className="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)] lg:items-center">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-bold tracking-tight text-[#002B7F] md:text-3xl">Calendar Alerts</h1>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    {activeAlerts.length} active alert{activeAlerts.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                  Monitor stock-critical items and review recent inventory events synced from Google Calendar.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">Out of stock: {outOfStock.length}</span>
+                  <span className="rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Low stock: {lowStock.length}</span>
                 </div>
               </div>
-              <div className="bg-white rounded-xl shadow-sm border border-amber-100 p-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-                    <AlertTriangle className="w-6 h-6 text-amber-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Low Stock</p>
-                    <p className="text-2xl font-bold text-amber-600">{lowStock.length}</p>
-                    <p className="text-xs text-gray-500">Items at or below 10 units</p>
-                  </div>
+
+              <div className="rounded-2xl border border-[#dbe7ff] bg-[#f8fbff] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={includeArchived}
+                      onChange={(e) => setIncludeArchived(e.target.checked)}
+                      className="rounded border-slate-300"
+                    />
+                    Include archived items
+                  </label>
+                  <button
+                    onClick={fetchAlertSummary}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#0a2a66] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#082554] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+                    Refresh
+                  </button>
                 </div>
+                <p className="mt-2 text-xs text-slate-500">Use refresh to pull latest alerts and events on demand.</p>
               </div>
             </div>
+          </header>
 
-            {/* Active Alerts - Items needing attention */}
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-[#0a2a66] mb-4">Active Stock Alerts</h2>
-              {activeAlerts.length === 0 ? (
-                <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-gray-500">
-                  <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-                  <p className="font-medium">All items are in good stock</p>
-                  <p className="text-sm mt-1">No items are currently low or out of stock.</p>
-                </div>
-              ) : (
-                <div className="grid gap-3">
-                  {activeAlerts.map((item) => (
-                    <div
-                      key={item._id}
-                      className={`flex items-center justify-between gap-4 p-4 rounded-xl shadow-sm border ${
-                        item.status === "Out of Stock" ? "bg-red-50 border-red-100" : "bg-amber-50 border-amber-100"
-                      }`}
-                    >
-                      <div className="flex items-center gap-4 min-w-0">
-                        {item.status === "Out of Stock" ? (
-                          <AlertCircle className="w-8 h-8 text-red-500 shrink-0" />
-                        ) : (
-                          <AlertTriangle className="w-8 h-8 text-amber-500 shrink-0" />
-                        )}
-                        <div className="min-w-0">
-                          <p className="font-semibold text-gray-900 truncate flex items-center gap-2">
-                            {item.name}
-                            {item.isArchived && (
-                              <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600 shrink-0">Archived</span>
-                            )}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            {item.category} • {item.quantity} {item.unit}
-                          </p>
-                        </div>
-                      </div>
-                      <Link
-                        to="/super-admin/manage-inventory"
-                        className="flex items-center gap-2 px-4 py-2 bg-[#0a2a66] text-white rounded-lg hover:bg-[#082554] transition shrink-0"
-                      >
-                        <ExternalLink size={16} />
-                        Manage
-                      </Link>
+          {loading ? (
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-100" />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700 shadow-sm">
+              <p className="font-semibold">Failed to load alerts</p>
+              <p className="mt-1 text-sm">{error}</p>
+            </div>
+          ) : (
+            <>
+              <section className="space-y-4">
+                <h2 className="text-xl font-semibold text-[#0a2a66]">Active Stock Alerts</h2>
+                {activeAlerts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
+                    <div className="mb-4 rounded-full bg-emerald-50 p-4">
+                      <CheckCircle2 className="h-10 w-10 text-emerald-600" />
                     </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* Recent Activity - Calendar events */}
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-[#0a2a66] mb-4">Recent Activity (Last 30 Days)</h2>
-              {recentEvents.length === 0 ? (
-                <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-gray-500">
-                  <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="font-medium">No recent events</p>
-                  <p className="text-sm mt-1">Stock change events will appear here once Google Calendar is connected.</p>
-                </div>
-              ) : (
-                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                  <ul className="divide-y divide-gray-100">
-                    {recentEvents.slice(0, 20).map((event, i) => (
-                      <li key={event.id || i} className="flex items-start gap-4 p-4 hover:bg-gray-50/50">
-                        {getEventIcon(event.summary)}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900">{event.summary}</p>
-                          {event.description && (
-                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{event.description}</p>
+                    <h3 className="text-lg font-semibold text-slate-700">All items are in good stock</h3>
+                    <p className="mt-1 text-sm text-slate-500">No items are currently low or out of stock.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {activeAlerts.map((item) => (
+                      <div
+                        key={item._id}
+                        className={`flex items-center justify-between gap-4 rounded-2xl border p-4 shadow-sm ${
+                          item.status === "Out of Stock" ? "border-red-100 bg-red-50" : "border-amber-100 bg-amber-50"
+                        }`}
+                      >
+                        <div className="min-w-0 flex items-center gap-4">
+                          {item.status === "Out of Stock" ? (
+                            <AlertCircle className="h-8 w-8 shrink-0 text-red-500" />
+                          ) : (
+                            <AlertTriangle className="h-8 w-8 shrink-0 text-amber-500" />
                           )}
+                          <div className="min-w-0">
+                            <p className="flex items-center gap-2 truncate font-semibold text-slate-900">
+                              {item.name}
+                              {item.isArchived && (
+                                <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600">Archived</span>
+                              )}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              {item.category} - {item.quantity} {item.unit}
+                            </p>
+                          </div>
                         </div>
-                        <span className="text-sm text-gray-500 shrink-0">{formatEventDate(event)}</span>
-                        <span className={`px-2 py-1 rounded text-xs font-medium shrink-0 ${getEventBadgeClass(event.summary)}`}>
-                          {event.summary?.split(":")[0] || "Event"}
-                        </span>
-                      </li>
+                        <Link
+                          to="/super-admin/manage-inventory"
+                          className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#0a2a66] px-4 py-2 text-white transition hover:bg-[#082554]"
+                        >
+                          <ExternalLink size={16} />
+                          Manage
+                        </Link>
+                      </div>
                     ))}
-                  </ul>
-                </div>
-              )}
-            </section>
+                  </div>
+                )}
+              </section>
 
-            {/* Collapsible Google Calendar Embed */}
-            <section>
-              <button
-                onClick={() => setShowCalendar(!showCalendar)}
-                className="flex items-center gap-2 text-[#0a2a66] font-semibold hover:underline mb-3"
-              >
-                {showCalendar ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                Google Calendar Embed
-              </button>
-              {showCalendar && (
-                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                  <iframe
-                    src={
-                      process.env.REACT_APP_GOOGLE_CALENDAR_EMBED ||
-                      "https://calendar.google.com/calendar/embed?src=2301101641%40student.buksu.edu.ph&ctz=UTC"
-                    }
-                    title="Google Calendar"
-                    style={{ border: 0 }}
-                    width="100%"
-                    height="500"
-                    frameBorder="0"
-                    scrolling="no"
-                  />
-                </div>
-              )}
-            </section>
-          </>
-        )}
+              <section className="space-y-4">
+                <h2 className="text-xl font-semibold text-[#0a2a66]">Recent Activity (Last 30 Days)</h2>
+                {recentEvents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
+                    <div className="mb-4 rounded-full bg-slate-100 p-4">
+                      <Calendar className="h-10 w-10 text-slate-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-700">No recent events</h3>
+                    <p className="mt-1 text-sm text-slate-500">Stock change events will appear here once Google Calendar is connected.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+                    <ul className="divide-y divide-slate-100">
+                      {recentEvents.slice(0, 20).map((event, i) => (
+                        <li key={event.id || i} className="flex items-start gap-4 p-4 transition-colors hover:bg-slate-50/60">
+                          {getEventIcon(event.summary)}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-slate-900">{event.summary}</p>
+                            {event.description && (
+                              <p className="mt-1 line-clamp-2 text-sm text-slate-600">{event.description}</p>
+                            )}
+                          </div>
+                          <span className="shrink-0 text-sm text-slate-500">{formatEventDate(event)}</span>
+                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${getEventBadgeClass(event.summary)}`}>
+                            {event.summary?.split(":")[0] || "Event"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                <button
+                  onClick={() => setShowCalendar(!showCalendar)}
+                  className="mb-2 inline-flex items-center gap-2 font-semibold text-[#0a2a66] hover:underline"
+                >
+                  {showCalendar ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  Google Calendar Embed
+                </button>
+                {showCalendar && (
+                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                    <iframe
+                      src={
+                        process.env.REACT_APP_GOOGLE_CALENDAR_EMBED ||
+                        "https://calendar.google.com/calendar/embed?src=2301101641%40student.buksu.edu.ph&ctz=UTC"
+                      }
+                      title="Google Calendar"
+                      style={{ border: 0 }}
+                      width="100%"
+                      height="500"
+                      frameBorder="0"
+                      scrolling="no"
+                    />
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+        </div>
       </main>
     </div>
   );

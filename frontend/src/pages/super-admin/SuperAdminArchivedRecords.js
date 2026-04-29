@@ -150,7 +150,7 @@ const SuperAdminArchivedRecords = () => {
     }, []);
     
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-slate-100 text-slate-900">
       {/* Sidebar */}
       <aside className="w-64 bg-[#002B7F] text-white flex flex-col justify-between shadow-lg">
         <div className="p-6">
@@ -164,6 +164,12 @@ const SuperAdminArchivedRecords = () => {
           <nav className="space-y-2">
             <Link to="/super-admin" className={getLinkClass("/super-admin")}>
               <Home size={18} /> Dashboard
+            </Link>
+            <Link
+              to="/super-admin/manage-users"
+              className={getLinkClass("/super-admin/manage-users")}
+            >
+              <UserCog size={18} /> Manage Users
             </Link>
             <Link
               to="/super-admin/requests"
@@ -251,108 +257,128 @@ const SuperAdminArchivedRecords = () => {
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 p-8">
-        <h1 className="text-3xl font-bold text-[#0a2a66] mb-6">
-          Archived Records
-        </h1>
+      <main className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <header className="overflow-hidden rounded-3xl border border-[#dbe7ff] bg-gradient-to-br from-white to-[#f6f9ff] shadow-sm">
+            <div className="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)] lg:items-center">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-bold tracking-tight text-[#002B7F] md:text-3xl">Archived Records</h1>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    {archivedItems.length + archivedUsers.length} archived record{archivedItems.length + archivedUsers.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                  Review archived inventory items and staff accounts, then restore records when they are needed again.
+                </p>
+              </div>
 
-        {/* ---------- TABS ---------- */}
-        <div className="flex gap-3 mb-6">
-          <button
-            onClick={() => setActiveTab("items")}
-            className={`px-6 py-2 rounded-lg font-medium ${
-              activeTab === "items"
-                ? "bg-[#002B7F] text-white"
-                : "bg-white text-gray-700 border"
-            }`}
-          >
-            Archived Items
-          </button>
+              <div className="rounded-2xl border border-[#dbe7ff] bg-[#f8fbff] p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="inline-flex rounded-full border border-slate-200 bg-white p-1">
+                    <button
+                      onClick={() => setActiveTab("items")}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                        activeTab === "items" ? "bg-[#002B7F] text-white" : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      Archived Items
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("users")}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                        activeTab === "users" ? "bg-[#002B7F] text-white" : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      Archived Users
+                    </button>
+                  </div>
+                  <div className="ml-auto rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                    Restore records anytime
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
 
-          <button
-            onClick={() => setActiveTab("users")}
-            className={`px-6 py-2 rounded-lg font-medium ${
-              activeTab === "users"
-                ? "bg-[#002B7F] text-white"
-                : "bg-white text-gray-700 border"
-            }`}
-          >
-            Archived Users
-          </button>
+          {loading ? (
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="h-16 animate-pulse rounded-lg bg-slate-100" />
+              ))}
+            </div>
+          ) : activeTab === "items" ? (
+            <ArchivedItemsSection
+              archived={archivedItems}
+              onRestore={(item) => openRestoreConfirm("item", item)}
+            />
+          ) : (
+            <ArchivedUsersSection
+              archived={archivedUsers}
+              onRestore={(user) => openRestoreConfirm("user", user)}
+            />
+          )}
         </div>
-
-        {/* ---------- CONTENT ---------- */}
-        {loading ? (
-          <p>Loading...</p>
-        ) : activeTab === "items" ? (
-          <ArchivedItemsSection
-            archived={archivedItems}
-            onRestore={(item) => openRestoreConfirm("item", item)}
-          />
-        ) : (
-          <ArchivedUsersSection
-            archived={archivedUsers}
-            onRestore={(user) => openRestoreConfirm("user", user)}
-          />
-        )}
       </main>
 
       {/* --- RESTORE CONFIRMATION (replaces window.confirm) --- */}
       {restoreConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
           onClick={() => !restoring && setRestoreConfirm(null)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="restore-dialog-title"
         >
           <div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-gray-100"
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 border-b border-gray-100 px-6 pb-2 pt-6">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
                 <RotateCcw size={24} />
               </div>
-              <h2 id="restore-dialog-title" className="text-xl font-semibold text-gray-800">
+              <h2 id="restore-dialog-title" className="text-lg font-semibold text-gray-900">
                 {restoreConfirm.type === "item" ? "Restore item?" : "Restore staff member?"}
               </h2>
             </div>
-            <p className="text-gray-600 text-sm mb-6">
-              {restoreConfirm.type === "item" ? (
-                <>
-                  Are you sure you want to restore <strong>{restoreConfirm.record.name}</strong>? It will appear in Manage Inventory again.
-                </>
-              ) : (
-                <>
-                  Are you sure you want to restore <strong>{restoreConfirm.record.name || restoreConfirm.record.email}</strong>? They will appear in Manage Users again.
-                </>
-              )}
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => !restoring && setRestoreConfirm(null)}
-                disabled={restoring}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleRestoreConfirm}
-                disabled={restoring}
-                className="px-4 py-2 rounded-lg bg-[#002B7F] text-white hover:bg-[#001F5A] disabled:opacity-50 flex items-center gap-2"
-              >
-                {restoring ? (
+            <div className="space-y-5 p-6">
+              <p className="text-sm leading-6 text-gray-600">
+                {restoreConfirm.type === "item" ? (
                   <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Restoring…
+                    Are you sure you want to restore <strong>{restoreConfirm.record.name}</strong>? It will appear in Manage Inventory again.
                   </>
                 ) : (
-                  "Restore"
+                  <>
+                    Are you sure you want to restore <strong>{restoreConfirm.record.name || restoreConfirm.record.email}</strong>? They will appear in Manage Users again.
+                  </>
                 )}
-              </button>
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => !restoring && setRestoreConfirm(null)}
+                  disabled={restoring}
+                  className="rounded-xl border border-gray-300 px-4 py-2.5 font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRestoreConfirm}
+                  disabled={restoring}
+                  className="flex items-center gap-2 rounded-xl bg-[#002B7F] px-4 py-2.5 font-medium text-white transition hover:bg-[#001F5A] disabled:opacity-50"
+                >
+                  {restoring ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Restoring…
+                    </>
+                  ) : (
+                    "Restore"
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -366,28 +392,32 @@ const SuperAdminArchivedRecords = () => {
  ------------------------------ */
 const ArchivedItemsSection = ({ archived, onRestore }) => {
   if (archived.length === 0)
-    return <p className="text-gray-500">No archived items.</p>;
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-12 text-center text-slate-500">
+        No archived items.
+      </div>
+    );
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {archived.map((item) => (
         <div
           key={item._id}
-          className="bg-white p-5 rounded-2xl shadow-md border border-gray-200 hover:shadow-lg transition flex flex-col justify-between h-full"
+          className="flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
           <div>
-            <h3 className="text-[15px] font-semibold mb-1">{item.name}</h3>
-            <p className="text-sm text-gray-600">{item.category}</p>
-            <p className="text-sm text-gray-600 mt-1">
-              Qty: <strong>{item.quantity}</strong> {item.unit}
+            <h3 className="mb-1 line-clamp-2 text-[15px] font-semibold text-slate-800">{item.name}</h3>
+            <p className="text-sm text-slate-500">{item.category}</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Qty: <strong className="text-slate-800">{item.quantity}</strong> {item.unit}
             </p>
           </div>
 
           <button
             onClick={() => onRestore(item)}
-            className="w-full py-2 mt-3 rounded-lg text-sm text-white font-medium bg-[#0b347a] hover:bg-[#0a2a66]"
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0b347a] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#0a2a66]"
           >
-            <RotateCcw size={14} className="inline mr-2" /> Restore
+            <RotateCcw size={14} /> Restore
           </button>
         </div>
       ))}
@@ -400,25 +430,29 @@ const ArchivedItemsSection = ({ archived, onRestore }) => {
  ------------------------------ */
 const ArchivedUsersSection = ({ archived, onRestore }) => {
   if (archived.length === 0)
-    return <p className="text-gray-500">No archived users.</p>;
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-12 text-center text-slate-500">
+        No archived users.
+      </div>
+    );
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {archived.map((user) => (
         <div
           key={user._id}
-          className="bg-white p-5 rounded-2xl shadow-md border hover:shadow-lg transition"
+          className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
-          <h3 className="text-lg font-semibold">{user.name}</h3>
-          <p className="text-sm text-gray-600">{user.email}</p>
-          <p className="text-sm text-gray-600">Role: {user.role}</p>
-          <p className="text-sm text-gray-600">Dept: {user.department}</p>
+          <h3 className="line-clamp-2 text-lg font-semibold text-slate-800">{user.name}</h3>
+          <p className="text-sm text-slate-500">{user.email}</p>
+          <p className="text-sm text-slate-600">Role: {user.role}</p>
+          <p className="text-sm text-slate-600">Dept: {user.department}</p>
 
           <button
             onClick={() => onRestore(user)}
-            className="w-full mt-3 py-2 bg-[#0a2a66] text-white rounded-lg hover:bg-[#072051]"
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0a2a66] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#072051]"
           >
-            <RotateCcw size={14} className="inline mr-2" />
+            <RotateCcw size={14} />
             Restore User
           </button>
         </div>

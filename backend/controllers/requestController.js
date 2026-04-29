@@ -4,9 +4,19 @@ import {
   maybeCreateLowStockEvent,
   maybeCreateRestockEvent,
 } from "../utils/stockAlerts.js";
-import { emitStockAlerts } from "../utils/socketService.js";
+import {
+  emitRequestAlerts,
+  emitRequestStatusUpdate,
+  emitStockAlerts,
+} from "../utils/socketService.js";
 import { getWorldTime } from "../utils/getWorldTime.js";
 import asyncHandler from "../middleware/asyncHandler.js";
+import { recordAudit } from "../utils/auditLogService.js";
+
+const SUCCESS_STATUSES = ["Approved", "Successful"];
+const UNSUCCESSFUL_STATUSES = ["Rejected", "Canceled", "Unsuccessful"];
+
+const isPendingRequest = (status) => status === "Pending";
 
 export const createRequest = asyncHandler(async (req, res) => {
   const { userId, itemId, itemName, department, requestedBy, quantity } = req.body;
@@ -22,19 +32,15 @@ export const createRequest = asyncHandler(async (req, res) => {
     throw new Error("Item not found.");
   }
 
-  if (item.quantity < quantity) {
-    await Request.create({
-      userId,
-      itemId,
-      itemName,
-      department,
-      requestedBy,
-      quantity,
-      status: "Unsuccessful",
-    });
-
+  const parsedQuantity = Number(quantity);
+  if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
     res.status(400);
-    throw new Error("Request Unsuccessful, Not enough stock available. Try again");
+    throw new Error("Please provide a valid quantity greater than zero.");
+  }
+
+  if (parsedQuantity > item.quantity) {
+    res.status(400);
+    throw new Error("Requested quantity exceeds current stock. Please enter a lower quantity.");
   }
 
   const currentTime = await getWorldTime();
@@ -44,22 +50,244 @@ export const createRequest = asyncHandler(async (req, res) => {
     itemName,
     department,
     requestedBy,
-    quantity,
-    status: "Successful",
+    quantity: parsedQuantity,
+    status: "Pending",
     requestedAt: currentTime,
   });
 
+  await recordAudit(req, {
+    userId,
+    name: requestedBy || "Staff",
+    role: "staff",
+    action: "REQUEST_SUBMITTED",
+    details: `Submitted request ${newRequest._id} for ${parsedQuantity} x ${itemName || item.name} (${department || "Unknown"}).`,
+  });
+
+  await emitRequestAlerts();
+
+  res.status(201).json({
+    message: "Request submitted and pending superadmin approval.",
+    request: newRequest,
+  });
+});
+
+export const approveRequest = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const requestDoc = await Request.findById(id);
+
+  if (!requestDoc) {
+    res.status(404);
+    throw new Error("Request not found.");
+  }
+
+  if (!isPendingRequest(requestDoc.status)) {
+    res.status(409);
+    throw new Error("Only pending requests can be approved.");
+  }
+
+  if (!requestDoc.itemId) {
+    res.status(400);
+    throw new Error("This request is missing an item reference and cannot be approved.");
+  }
+
+  const item = await Item.findById(requestDoc.itemId);
+  if (!item) {
+    requestDoc.status = "Rejected";
+    requestDoc.rejectionReason = "Rejected automatically: item no longer exists.";
+    requestDoc.rejectedAt = new Date();
+    requestDoc.rejectedBy = req.user._id;
+    await requestDoc.save();
+
+    await recordAudit(req, {
+      userId: req.user?._id,
+      name: req.user?.name,
+      role: req.user?.role,
+      action: "REQUEST_AUTO_REJECTED",
+      details: `Auto-rejected request ${requestDoc._id} because the item no longer exists.`,
+    });
+
+    await emitRequestAlerts();
+    await emitRequestStatusUpdate({
+      requestId: String(requestDoc._id),
+      userId: String(requestDoc.userId),
+      status: requestDoc.status,
+      itemName: requestDoc.itemName,
+      quantity: requestDoc.quantity,
+      rejectionReason: requestDoc.rejectionReason || "",
+      updatedAt: new Date().toISOString(),
+    });
+
+    res.status(409).json({
+      message: "Request auto-rejected because the item no longer exists.",
+      request: requestDoc,
+    });
+    return;
+  }
+
+  if (item.quantity < requestDoc.quantity) {
+    requestDoc.status = "Rejected";
+    requestDoc.rejectionReason = "Rejected automatically: insufficient stock at approval time.";
+    requestDoc.rejectedAt = new Date();
+    requestDoc.rejectedBy = req.user._id;
+    await requestDoc.save();
+
+    await recordAudit(req, {
+      userId: req.user?._id,
+      name: req.user?.name,
+      role: req.user?.role,
+      action: "REQUEST_AUTO_REJECTED",
+      details: `Auto-rejected request ${requestDoc._id} due to insufficient stock at approval time (requested ${requestDoc.quantity}, available ${item.quantity}).`,
+    });
+
+    await emitRequestAlerts();
+    await emitRequestStatusUpdate({
+      requestId: String(requestDoc._id),
+      userId: String(requestDoc.userId),
+      status: requestDoc.status,
+      itemName: requestDoc.itemName,
+      quantity: requestDoc.quantity,
+      rejectionReason: requestDoc.rejectionReason || "",
+      updatedAt: new Date().toISOString(),
+    });
+
+    res.status(409).json({
+      message: "Request auto-rejected due to insufficient stock at approval time.",
+      request: requestDoc,
+    });
+    return;
+  }
+
   const prevQty = item.quantity;
-  item.quantity -= quantity;
+  item.quantity -= requestDoc.quantity;
   await item.save();
+
+  requestDoc.status = "Approved";
+  requestDoc.approvedAt = new Date();
+  requestDoc.approvedBy = req.user._id;
+  requestDoc.rejectionReason = "";
+  await requestDoc.save();
+
+  await recordAudit(req, {
+    userId: req.user?._id,
+    name: req.user?.name,
+    role: req.user?.role,
+    action: "REQUEST_APPROVED",
+    details: `Approved request ${requestDoc._id} for ${requestDoc.quantity} x ${requestDoc.itemName}. Stock moved ${prevQty} -> ${item.quantity}.`,
+  });
+
+  await emitRequestAlerts();
+  await emitRequestStatusUpdate({
+    requestId: String(requestDoc._id),
+    userId: String(requestDoc.userId),
+    status: requestDoc.status,
+    itemName: requestDoc.itemName,
+    quantity: requestDoc.quantity,
+    rejectionReason: "",
+    updatedAt: new Date().toISOString(),
+  });
 
   await maybeCreateLowStockEvent(item, prevQty, item.quantity);
   await maybeCreateRestockEvent(item, prevQty, item.quantity);
   await emitStockAlerts();
 
-  res.status(201).json({
-    message: "Request successful.",
-    request: newRequest,
+  res.json({
+    message: "Request approved and stock deducted successfully.",
+    request: requestDoc,
+  });
+});
+
+export const rejectRequest = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  const requestDoc = await Request.findById(id);
+
+  if (!requestDoc) {
+    res.status(404);
+    throw new Error("Request not found.");
+  }
+
+  if (!isPendingRequest(requestDoc.status)) {
+    res.status(409);
+    throw new Error("Only pending requests can be rejected.");
+  }
+
+  requestDoc.status = "Rejected";
+  requestDoc.rejectedAt = new Date();
+  requestDoc.rejectedBy = req.user._id;
+  requestDoc.rejectionReason = (reason || "Rejected by superadmin.").toString().trim();
+  await requestDoc.save();
+
+  await recordAudit(req, {
+    userId: req.user?._id,
+    name: req.user?.name,
+    role: req.user?.role,
+    action: "REQUEST_REJECTED",
+    details: `Rejected request ${requestDoc._id} for ${requestDoc.quantity} x ${requestDoc.itemName}. Reason: ${requestDoc.rejectionReason}`,
+  });
+
+  await emitRequestAlerts();
+  await emitRequestStatusUpdate({
+    requestId: String(requestDoc._id),
+    userId: String(requestDoc.userId),
+    status: requestDoc.status,
+    itemName: requestDoc.itemName,
+    quantity: requestDoc.quantity,
+    rejectionReason: requestDoc.rejectionReason || "",
+    updatedAt: new Date().toISOString(),
+  });
+
+  res.json({
+    message: "Request rejected successfully.",
+    request: requestDoc,
+  });
+});
+
+export const cancelRequest = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const requestDoc = await Request.findById(id);
+
+  if (!requestDoc) {
+    res.status(404);
+    throw new Error("Request not found.");
+  }
+
+  if (!isPendingRequest(requestDoc.status)) {
+    res.status(409);
+    throw new Error("Only pending requests can be canceled.");
+  }
+
+  if (String(requestDoc.userId) !== String(req.user._id)) {
+    res.status(403);
+    throw new Error("You can only cancel your own pending requests.");
+  }
+
+  requestDoc.status = "Canceled";
+  requestDoc.canceledAt = new Date();
+  requestDoc.canceledBy = req.user._id;
+  await requestDoc.save();
+
+  await recordAudit(req, {
+    userId: req.user?._id,
+    name: req.user?.name,
+    role: req.user?.role,
+    action: "REQUEST_CANCELED",
+    details: `Canceled pending request ${requestDoc._id} for ${requestDoc.quantity} x ${requestDoc.itemName}.`,
+  });
+
+  await emitRequestAlerts();
+  await emitRequestStatusUpdate({
+    requestId: String(requestDoc._id),
+    userId: String(requestDoc.userId),
+    status: requestDoc.status,
+    itemName: requestDoc.itemName,
+    quantity: requestDoc.quantity,
+    rejectionReason: "",
+    updatedAt: new Date().toISOString(),
+  });
+
+  res.json({
+    message: "Pending request canceled successfully.",
+    request: requestDoc,
   });
 });
 
@@ -98,10 +326,14 @@ export const getDepartmentRequests = asyncHandler(async (req, res) => {
 export const getDepartmentStats = asyncHandler(async (req, res) => {
   const { department } = req.params;
   const total = await Request.countDocuments({ department });
-  const successful = await Request.countDocuments({ department, status: "Successful" });
-  const unsuccessful = await Request.countDocuments({ department, status: "Unsuccessful" });
+  const successful = await Request.countDocuments({ department, status: { $in: SUCCESS_STATUSES } });
+  const unsuccessful = await Request.countDocuments({
+    department,
+    status: { $in: UNSUCCESSFUL_STATUSES },
+  });
+  const pending = await Request.countDocuments({ department, status: "Pending" });
 
-  res.json({ total, successful, unsuccessful });
+  res.json({ total, successful, unsuccessful, pending });
 });
 
 export const getAllDepartmentRequests = asyncHandler(async (req, res) => {
@@ -144,6 +376,22 @@ export const getSummary = asyncHandler(async (req, res) => {
   const outOfStock = await Item.countDocuments({ quantity: { $lte: 0 } });
 
   res.json({ totalRequests, totalItems, outOfStock });
+});
+
+export const getPendingRequestAlertCount = asyncHandler(async (req, res) => {
+  const pending = await Request.countDocuments({ status: "Pending" });
+  res.json({ success: true, pending });
+});
+
+export const getPendingRequestAlertSummary = asyncHandler(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 5, 20);
+  const pendingRequests = await Request.find({ status: "Pending" })
+    .sort({ requestedAt: -1, createdAt: -1 })
+    .limit(limit)
+    .select("itemName quantity department requestedBy requestedAt")
+    .lean();
+
+  res.json({ success: true, pending: pendingRequests.length, pendingRequests });
 });
 
 export const getRequestTrends = asyncHandler(async (req, res) => {
@@ -233,10 +481,11 @@ export const getDepartmentActivity = asyncHandler(async (req, res) => {
 
 export const getStaffSummary = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  const successful = await Request.countDocuments({ userId, status: "Successful" });
-  const unsuccessful = await Request.countDocuments({ userId, status: "Unsuccessful" });
-  const total = successful + unsuccessful;
+  const successful = await Request.countDocuments({ userId, status: { $in: SUCCESS_STATUSES } });
+  const unsuccessful = await Request.countDocuments({ userId, status: { $in: UNSUCCESSFUL_STATUSES } });
+  const pending = await Request.countDocuments({ userId, status: "Pending" });
+  const total = successful + unsuccessful + pending;
 
-  res.json({ successful, unsuccessful, total });
+  res.json({ successful, unsuccessful, pending, total });
 });
 

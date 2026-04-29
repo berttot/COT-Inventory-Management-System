@@ -123,7 +123,7 @@ const DepartmentAdminArchivedUsers = () => {
   }, []);
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-slate-100 text-slate-900">
 
       {/* Sidebar */}
       <aside className="w-64 bg-[#002B7F] text-white flex flex-col justify-between shadow-lg">
@@ -157,8 +157,8 @@ const DepartmentAdminArchivedUsers = () => {
                   <div className="flex items-center gap-2">
                     <User size={22} className="opacity-80" />
                     <div>
-                      <p className="text-sm font-medium text-white mb-1">{userName}</p>
-                      <p className="text-xs opacity-70 text-white mb-3">{department}</p>
+                      <p className="text-sm font-medium text-white mb-1">{userName || "Department Admin"}</p>
+                      <p className="text-xs opacity-70 text-white mb-3">{department || "Department"}</p>
                     </div>
                   </div>
       
@@ -176,7 +176,7 @@ const DepartmentAdminArchivedUsers = () => {
                   <div className="mt-4 w-full max-w-[220px] flex flex-col gap-2">
                     <button
                       onClick={() => navigate("/department-admin/settings")}
-                      className="bg-[#2563eb] text-white py-2 rounded-lg hover:bg-[#1d4ed8] transition font-medium flex items-center justify-center gap-2 mb-1"
+                      className="bg-[#2563eb] text-white py-2 rounded-lg hover:bg-[#1d4ed8] transition font-medium flex items-center justify-center gap-2"
                     >
                       <Settings size={16} />
                       Settings
@@ -200,80 +200,119 @@ const DepartmentAdminArchivedUsers = () => {
             </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-auto">
-        <h1 className="text-3xl font-bold text-[#0a2a66] mb-6">Archived Staff</h1>
+      <main className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <header className="overflow-hidden rounded-3xl border border-[#dbe7ff] bg-gradient-to-br from-white to-[#f6f9ff] shadow-sm">
+            <div className="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)] lg:items-center">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-bold tracking-tight text-[#002B7F] md:text-3xl">Archived Staff</h1>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    {archivedStaff.length} archived staff{archivedStaff.length !== 1 ? " members" : " member"}
+                  </span>
+                </div>
+                <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                  Review archived staff accounts from {department || "your department"} and restore users when they need to access the system again.
+                </p>
+              </div>
 
-        {loading ? (
-          <p>Loading...</p>
-        ) : archivedStaff.length === 0 ? (
-          <p className="text-gray-500">No archived staff found.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {archivedStaff.map((user) => (
-              <div
-                key={user._id}
-                className="bg-white p-5 rounded-2xl shadow-md border border-gray-200 hover:shadow-lg transition flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-[15px] font-semibold text-gray-800">
-                      {user.name}
-                    </h3>
-                    <span className="text-[11px] font-medium bg-red-100 text-red-700 px-2.5 py-0.5 rounded-md">
-                      Archived
-                    </span>
+              <div className="rounded-2xl border border-[#dbe7ff] bg-[#f8fbff] p-4">
+                <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <Archive size={16} className="text-[#002B7F]" />
+                  Restore Center
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                  <span className="rounded-full border border-[#dbe7ff] bg-[#eef4ff] px-3 py-1 text-[#1e3a8a]">
+                    Department: {department || "-"}
+                  </span>
+                  <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-700">
+                    Archived: {archivedStaff.length}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-slate-500">
+                  Restored users will reappear in Manage Staff immediately.
+                </p>
+              </div>
+            </div>
+          </header>
+
+          {loading ? (
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="h-16 animate-pulse rounded-lg bg-slate-100" />
+              ))}
+            </div>
+          ) : archivedStaff.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-12 text-center text-slate-500">
+              No archived staff found.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {archivedStaff.map((user) => (
+                <div
+                  key={user._id}
+                  className="flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <h3 className="line-clamp-2 text-[15px] font-semibold text-slate-800">{user.name || "Unnamed user"}</h3>
+                      <span className="rounded-md bg-red-100 px-2.5 py-0.5 text-[11px] font-medium text-red-700">
+                        Archived
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-slate-500">{user.email || "No email"}</p>
+                    <p className="mt-2 text-sm text-slate-600">
+                      Role: <strong className="text-slate-800">{user.role || "staff"}</strong>
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Access ID: <strong className="text-slate-800">{user.accessID || "-"}</strong>
+                    </p>
                   </div>
 
-                  <p className="text-[13px] text-gray-600">
-                    <strong>Email:</strong> {user.email}
-                  </p>
-                  <p className="text-[13px] text-gray-600">
-                    <strong>Access ID:</strong> {user.accessID}
-                  </p>
+                  <button
+                    onClick={() => openRestoreConfirm(user)}
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0a2a66] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#072051]"
+                  >
+                    <RotateCcw size={14} /> Restore Staff
+                  </button>
                 </div>
-
-                <button
-                  onClick={() => openRestoreConfirm(user)}
-                  className="w-full mt-4 py-2.5 rounded-lg text-sm text-white font-medium bg-[#0a2a66] hover:bg-[#072051] transition flex items-center justify-center gap-2"
-                >
-                  <RotateCcw size={14} /> Restore Staff
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </main>
 
       {/* --- RESTORE CONFIRMATION (replaces window.confirm) --- */}
       {restoreConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
           onClick={() => !restoring && setRestoreConfirm(null)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="restore-staff-dialog-title"
         >
           <div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-gray-100"
+            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 mb-4">
+            <div className="mb-4 flex items-center gap-3">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
                 <RotateCcw size={24} />
               </div>
-              <h2 id="restore-staff-dialog-title" className="text-xl font-semibold text-gray-800">
+              <h2 id="restore-staff-dialog-title" className="text-xl font-semibold text-slate-800">
                 Restore staff member?
               </h2>
             </div>
-            <p className="text-gray-600 text-sm mb-6">
+            <p className="mb-6 text-sm text-slate-600">
               Are you sure you want to restore <strong>{restoreConfirm.name}</strong>? They will appear in Manage Staff again.
             </p>
-            <div className="flex gap-3 justify-end">
+            <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => !restoring && setRestoreConfirm(null)}
                 disabled={restoring}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -281,7 +320,7 @@ const DepartmentAdminArchivedUsers = () => {
                 type="button"
                 onClick={handleRestoreConfirm}
                 disabled={restoring}
-                className="px-4 py-2 rounded-lg bg-[#002B7F] text-white hover:bg-[#001F5A] disabled:opacity-50 flex items-center gap-2"
+                className="flex items-center gap-2 rounded-lg bg-[#002B7F] px-4 py-2 text-white transition hover:bg-[#001F5A] disabled:opacity-50"
               >
                 {restoring ? (
                   <>

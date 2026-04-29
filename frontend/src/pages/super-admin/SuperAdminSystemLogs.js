@@ -1,5 +1,5 @@
 // src/pages/super-admin/SuperAdminSystemLogs.js
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
@@ -15,6 +15,9 @@ import {
   Settings,
   Download,
   CalendarDays,
+  Hash,
+  Clock,
+  Filter,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import NotificationBell from "../../components/NotificationBell";
@@ -34,7 +37,33 @@ const AUDIT_ACTIONS = [
   { value: "PROFILE_UPDATED", label: "Profile updated" },
   { value: "ARCHIVE_USER", label: "Archive user" },
   { value: "UNARCHIVE_USER", label: "Unarchive user" },
+  { value: "REQUEST_SUBMITTED", label: "Request submitted" },
+  { value: "REQUEST_APPROVED", label: "Request approved" },
+  { value: "REQUEST_REJECTED", label: "Request rejected" },
+  { value: "REQUEST_AUTO_REJECTED", label: "Request auto-rejected" },
+  { value: "REQUEST_CANCELED", label: "Request canceled" },
 ];
+
+const formatRoleLabel = (role) => {
+  if (!role) return "-";
+  const normalized = String(role).toLowerCase();
+  if (normalized === "superadmin") return "Super Admin";
+  if (normalized === "departmentadmin") return "Department Admin";
+  if (normalized === "staff") return "Staff";
+  return role;
+};
+
+const getActionBadgeClass = (action) => {
+  if (!action) return "bg-slate-100 text-slate-700";
+  if (action.startsWith("REQUEST_")) return "bg-blue-50 text-blue-700 border border-blue-100";
+  if (action === "LOGIN" || action === "LOGOUT") {
+    return "bg-emerald-50 text-emerald-700 border border-emerald-100";
+  }
+  if (action.includes("PASSWORD") || action.includes("PROFILE")) {
+    return "bg-violet-50 text-violet-700 border border-violet-100";
+  }
+  return "bg-slate-100 text-slate-700 border border-slate-200";
+};
 
 export default function SuperAdminSystemLogs() {
   const [logs, setLogs] = useState([]);
@@ -162,6 +191,22 @@ export default function SuperAdminSystemLogs() {
   };
 
   const totalPages = Math.ceil(total / limit);
+  const activeFilterCount = [filter.role, filter.action, filter.from, filter.to].filter(Boolean).length;
+  const fromEntry = total === 0 ? 0 : (page - 1) * limit + 1;
+  const toEntry = total === 0 ? 0 : Math.min(total, page * limit);
+
+  const pageStats = useMemo(() => {
+    return logs.reduce(
+      (acc, log) => {
+        const action = String(log?.action || "");
+        if (action.startsWith("REQUEST_")) acc.requests += 1;
+        else if (action === "LOGIN" || action === "LOGOUT") acc.auth += 1;
+        else acc.account += 1;
+        return acc;
+      },
+      { requests: 0, auth: 0, account: 0 }
+    );
+  }, [logs]);
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -174,6 +219,9 @@ export default function SuperAdminSystemLogs() {
           <nav className="space-y-2">
             <Link to="/super-admin" className={getLinkClass("/super-admin")}>
               <Home size={18} /> Dashboard
+            </Link>
+            <Link to="/super-admin/manage-users" className={getLinkClass("/super-admin/manage-users")}>
+              <UserCog size={18} /> Manage Users
             </Link>
             <Link to="/super-admin/requests" className={getLinkClass("/super-admin/requests")}>
               <ClipboardList size={18} /> Request Log
@@ -243,99 +291,135 @@ export default function SuperAdminSystemLogs() {
       <main className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
         <div className="mx-auto max-w-7xl space-y-6">
           {/* Header */}
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#002B7F] md:text-3xl">
-              Activity Report
-            </h1>
-            <p className="mt-1.5 text-sm text-slate-500 max-w-2xl">
-              System-wide activity log: logins, logouts, account creation, password changes, profile updates, and user archive/restore.
-            </p>
-          </div>
-
-          {/* Filters — horizontal bar, same style as Request Log */}
-          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-            <select
-              value={filter.role}
-              onChange={(e) => setFilter({ ...filter, role: e.target.value })}
-              className="rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm font-medium text-slate-700 focus:border-[#002B7F] focus:outline-none focus:ring-2 focus:ring-[#002B7F]/20 min-w-[10rem]"
-            >
-              <option value="">All roles</option>
-              <option value="superadmin">Super Admin</option>
-              <option value="departmentadmin">Department Admin</option>
-              <option value="staff">Staff</option>
-            </select>
-            <select
-              value={filter.action}
-              onChange={(e) => setFilter({ ...filter, action: e.target.value })}
-              className="rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm font-medium text-slate-700 focus:border-[#002B7F] focus:outline-none focus:ring-2 focus:ring-[#002B7F]/20 min-w-[10rem]"
-            >
-              {AUDIT_ACTIONS.map((opt) => (
-                <option key={opt.value || "all"} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex items-center gap-2">
-              <CalendarDays size={18} className="text-slate-500" />
-              <input
-                type="date"
-                value={filter.from}
-                onChange={(e) => setFilter({ ...filter, from: e.target.value })}
-                className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-sm font-medium text-slate-700 focus:border-[#002B7F] focus:outline-none focus:ring-2 focus:ring-[#002B7F]/20"
-              />
-              <span className="text-slate-400">–</span>
-              <input
-                type="date"
-                value={filter.to}
-                onChange={(e) => setFilter({ ...filter, to: e.target.value })}
-                className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-sm font-medium text-slate-700 focus:border-[#002B7F] focus:outline-none focus:ring-2 focus:ring-[#002B7F]/20"
-              />
+          <header className="overflow-hidden rounded-3xl border border-[#dbe7ff] bg-gradient-to-br from-white to-[#f6f9ff] shadow-sm">
+            <div className="px-6 py-6">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-bold tracking-tight text-[#002B7F] md:text-3xl">Activity Report</h1>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    {total} entr{total === 1 ? "y" : "ies"}
+                  </span>
+                </div>
+                <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                  System-wide activity log for authentication, account management, and request lifecycle actions.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-[#dbe7ff] bg-[#eef4ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                    Request events: {pageStats.requests}
+                  </span>
+                  <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    Login/logout: {pageStats.auth}
+                  </span>
+                  <span className="rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                    Account updates: {pageStats.account}
+                  </span>
+                </div>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={handleApplyFilters}
-              className="rounded-lg bg-[#002B7F] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#001d57]"
-            >
-              Apply
-            </button>
-            <button
-              type="button"
-              onClick={handleClearFilters}
-              className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-200"
-            >
-              Clear
-            </button>
-            <div className="flex items-center border-l border-slate-200 pl-4">
+          </header>
+
+          {/* Filters */}
+          <div className="rounded-3xl border border-[#dbe7ff] bg-gradient-to-br from-white to-[#f8fbff] p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <Filter size={16} className="text-[#002B7F]" />
+                Filters
+              </div>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                Active filters: {activeFilterCount}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={filter.role}
+                onChange={(e) => setFilter({ ...filter, role: e.target.value })}
+                className="min-w-[10rem] rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 focus:border-[#002B7F] focus:outline-none focus:ring-2 focus:ring-[#002B7F]/20"
+              >
+                <option value="">All roles</option>
+                <option value="superadmin">Super Admin</option>
+                <option value="departmentadmin">Department Admin</option>
+                <option value="staff">Staff</option>
+              </select>
+              <select
+                value={filter.action}
+                onChange={(e) => setFilter({ ...filter, action: e.target.value })}
+                className="min-w-[10rem] rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 focus:border-[#002B7F] focus:outline-none focus:ring-2 focus:ring-[#002B7F]/20"
+              >
+                {AUDIT_ACTIONS.map((opt) => (
+                  <option key={opt.value || "all"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                <CalendarDays size={16} className="text-slate-400" />
+                <input
+                  type="date"
+                  value={filter.from}
+                  onChange={(e) => setFilter({ ...filter, from: e.target.value })}
+                  className="border-0 bg-transparent px-1 py-0 text-sm font-medium text-slate-700 focus:outline-none"
+                />
+                <span className="text-slate-300">-</span>
+                <input
+                  type="date"
+                  value={filter.to}
+                  onChange={(e) => setFilter({ ...filter, to: e.target.value })}
+                  className="border-0 bg-transparent px-1 py-0 text-sm font-medium text-slate-700 focus:outline-none"
+                />
+              </div>
               <button
                 type="button"
-                onClick={handleDownloadPdf}
-                disabled={pdfLoading}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#f97316] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleApplyFilters}
+                className="rounded-lg bg-[#002B7F] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#001d57]"
               >
-                <Download size={16} />
-                {pdfLoading ? "Generating…" : "Download PDF"}
+                Apply
               </button>
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-200"
+              >
+                Clear
+              </button>
+              <div className="ml-auto flex items-center gap-2 border-l border-slate-200 pl-3">
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  disabled={pdfLoading}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#f97316] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download size={16} />
+                  {pdfLoading ? "Generating..." : "Export Filtered PDF"}
+                </button>
+              </div>
             </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Export uses the currently selected role, action, and date range filters.
+            </p>
           </div>
 
           {/* Logs Table */}
           <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
             {loading ? (
-              <div className="p-12 text-center text-slate-500">Loading activity log…</div>
+              <div className="space-y-3 p-4">
+                {[1, 2, 3, 4, 5, 6].map((item) => (
+                  <div key={item} className="h-12 animate-pulse rounded-lg bg-slate-100" />
+                ))}
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                      <th className="py-3 px-4 text-left font-semibold">Time</th>
-                      <th className="py-3 px-4 text-left font-semibold">User</th>
-                      <th className="py-3 px-4 text-left font-semibold">Role</th>
-                      <th className="py-3 px-4 text-left font-semibold">Action</th>
-                      <th className="py-3 px-4 text-left font-semibold">Details</th>
-                      <th className="py-3 px-4 text-left font-semibold">IP</th>
+                    <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
+                      <th className="px-4 py-3.5">Time</th>
+                      <th className="px-4 py-3.5">User</th>
+                      <th className="px-4 py-3.5">Role</th>
+                      <th className="px-4 py-3.5">Action</th>
+                      <th className="px-4 py-3.5">Details</th>
+                      <th className="px-4 py-3.5">IP</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100">
                     {logs.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="p-8 text-center text-slate-500 italic">
@@ -346,29 +430,48 @@ export default function SuperAdminSystemLogs() {
                       logs.map((log, idx) => (
                         <tr
                           key={log._id}
-                          className={`border-b border-slate-100 transition ${
-                            idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
-                          } hover:bg-slate-100/80`}
+                          className={`transition-colors hover:bg-slate-50/60 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
                         >
-                          <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
-                            {new Date(log.timestamp).toLocaleString()}
+                          <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5">
+                              <Clock size={14} className="text-slate-400" />
+                              {new Date(log.timestamp).toLocaleString()}
+                            </span>
                           </td>
-                          <td className="py-3 px-4 font-medium text-slate-800">
+                          <td className="px-4 py-3 font-medium text-slate-800">
                             {log.name || log.userId || "—"}
                           </td>
-                          <td className="py-3 px-4 text-slate-600 capitalize">
-                            {log.role || "—"}
+                          <td className="px-4 py-3 text-slate-600">
+                            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                              {formatRoleLabel(log.role)}
+                            </span>
                           </td>
-                          <td className="py-3 px-4">
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-[#0a2a66]/10 text-[#0a2a66]">
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getActionBadgeClass(log.action)}`}>
                               {log.action}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-slate-600 max-w-xs truncate" title={log.details}>
-                            {log.details || "—"}
+                          <td className="px-4 py-3 text-slate-600">
+                            {log.details ? (
+                              <div className="group relative max-w-xs" tabIndex={0}>
+                                <p className="truncate">{log.details}</p>
+                                <div
+                                  className={`pointer-events-none absolute right-0 z-20 hidden w-[28rem] max-w-[80vw] rounded-xl border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-700 shadow-xl group-hover:block group-focus:block ${
+                                    idx >= logs.length - 2 ? "bottom-full mb-2" : "top-full mt-2"
+                                  }`}
+                                >
+                                  {log.details}
+                                </div>
+                              </div>
+                            ) : (
+                              "—"
+                            )}
                           </td>
-                          <td className="py-3 px-4 text-slate-500 text-xs font-mono">
-                            {log.ipAddress || "—"}
+                          <td className="px-4 py-3 text-slate-500 text-xs font-mono">
+                            <span className="inline-flex items-center gap-1">
+                              <Hash size={12} />
+                              {log.ipAddress || "—"}
+                            </span>
                           </td>
                         </tr>
                       ))
@@ -380,22 +483,25 @@ export default function SuperAdminSystemLogs() {
           </div>
 
           {/* Pagination */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
             <p className="text-sm text-slate-600">
-              Page {page} of {totalPages || 1} · {total} total entries
+              Showing <span className="font-semibold text-slate-800">{fromEntry}</span>-<span className="font-semibold text-slate-800">{toEntry}</span> of <span className="font-semibold text-slate-800">{total}</span>
             </p>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => fetchLogs(Math.max(1, page - 1))}
                 disabled={page <= 1}
-                className="px-4 py-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Previous
+                Prev
               </button>
+              <div className="text-sm text-slate-600">
+                Page <span className="font-semibold text-slate-800">{page}</span> of <span className="font-semibold text-slate-800">{totalPages || 1}</span>
+              </div>
               <button
                 onClick={() => fetchLogs(page + 1)}
                 disabled={page >= totalPages}
-                className="px-4 py-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next
               </button>

@@ -29,18 +29,18 @@ const API_BASE = `${API_URL}/items`;
 const StatusBadge = ({ quantity }) => {
   if (quantity === 0)
     return (
-      <span className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-red-100 text-red-600 shrink-0">
+      <span className="shrink-0 rounded-full border border-red-100 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700">
         Out of Stock
       </span>
     );
   if (quantity <= 10)
     return (
-      <span className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-yellow-100 text-yellow-600 shrink-0">
+      <span className="shrink-0 rounded-full border border-amber-100 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
         Limited
       </span>
     );
   return (
-    <span className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-green-100 text-green-600 shrink-0">
+    <span className="shrink-0 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
       Available
     </span>
   );
@@ -149,7 +149,6 @@ const SuperAdminManageInventory = () => {
       if (!res.ok) throw new Error("Failed to load items");
       const data = await res.json();
       setItems(Array.isArray(data) ? data : data.items || []);
-      setFiltered(Array.isArray(data) ? data : data.items || []);
     } catch (err) {
       console.error("Fetch items error:", err);
       toast.error("Unable to load items");
@@ -400,7 +399,7 @@ const SuperAdminManageInventory = () => {
   const categories = ["All", ...getCanonicalCategories(items)];
 
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-900">
+    <div className="flex h-screen bg-slate-100 text-slate-900">
       {/* Sidebar (same as dashboard) */}
       <aside className="w-64 bg-[#002B7F] text-white flex flex-col justify-between shadow-lg">
         <div className="p-6">
@@ -411,6 +410,10 @@ const SuperAdminManageInventory = () => {
             <Link to="/super-admin" className={getLinkClass("/super-admin")}>
               <Home size={18} />
               Dashboard
+            </Link>
+            <Link to="/super-admin/manage-users" className={getLinkClass("/super-admin/manage-users")}>
+              <UserCog size={18} />
+              Manage Users
             </Link>
             <Link
               to="/super-admin/requests"
@@ -500,32 +503,41 @@ const SuperAdminManageInventory = () => {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-[#0a2a66]">Manage Inventory</h1>
-            <p className="text-gray-600 mt-1">Add, edit, restock and remove items</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative w-full md:w-[280px]">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={18}
-              />
-              <input
-                type="text"
-                placeholder="Search items..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0a2a66]/20 focus:border-[#0a2a66] transition"
-              />
+      <main className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <header className="overflow-hidden rounded-3xl border border-[#dbe7ff] bg-gradient-to-br from-white to-[#f6f9ff] shadow-sm">
+            <div className="px-6 py-6">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-bold tracking-tight text-[#002B7F] md:text-3xl">Manage Inventory</h1>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    {total} item{total !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                  Add new stock, update records, and keep availability accurate across all categories.
+                </p>
+              </div>
             </div>
-            <div className="bg-white border border-gray-300 rounded-xl px-3 py-2 shadow-sm min-w-[140px]">
+          </header>
+
+          <div className="rounded-3xl border border-[#dbe7ff] bg-gradient-to-br from-white to-[#f8fbff] p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="relative block min-w-[220px] flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search items..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full rounded-2xl border border-[#dbe7ff] bg-white py-3 pl-10 pr-4 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-[#002B7F] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#002B7F]/15"
+                />
+              </label>
+
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="outline-none text-sm text-gray-900 pr-6 w-full bg-transparent focus:ring-0"
+                className="min-w-[170px] rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 focus:border-[#002B7F] focus:outline-none focus:ring-2 focus:ring-[#002B7F]/20"
               >
                 {categories.map((cat) => (
                   <option key={cat} value={cat}>
@@ -533,125 +545,129 @@ const SuperAdminManageInventory = () => {
                   </option>
                 ))}
               </select>
-            </div>
-            <button
-              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-              className="flex items-center gap-1.5 bg-white border border-gray-300 px-3 py-2 rounded-xl shadow-sm hover:bg-gray-50 transition text-sm text-gray-700"
-            >
-              {sortOrder === "asc" ? (
-                <ChevronUp size={16} className="text-gray-600" />
-              ) : (
-                <ChevronDown size={16} className="text-gray-600" />
-              )}
-              <span>{sortOrder === "asc" ? "Low" : "High"}</span>
-            </button>
-            <button
-              onClick={openAdd}
-              className="flex items-center gap-2 bg-[#0a2a66] text-white px-4 py-2.5 rounded-xl hover:bg-[#082554] transition shadow-sm text-sm font-medium"
-            >
-              <PlusCircle size={18} /> Add Item
-            </button>
-          </div>
-        </div>
 
-        {loading ? (
-          <div className="flex justify-center items-center py-24">
-            <Loader2 className="animate-spin text-[#0a2a66]" size={32} />
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-gray-600">
-                Showing <span className="font-semibold text-gray-800">{showingFrom}</span>–<span className="font-semibold text-gray-800">{showingTo}</span> of{" "}
-                <span className="font-semibold text-gray-800">{total}</span>
-              </p>
-              <p className="text-sm text-gray-500">
-                Page <span className="font-semibold text-gray-800">{safePage}</span> of{" "}
-                <span className="font-semibold text-gray-800">{totalPages}</span>
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {pagedFiltered.map((item) => (
-              <div
-                key={item._id}
-                className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden hover:shadow-lg hover:border-gray-200 transition flex flex-col"
+              <button
+                type="button"
+                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
-                <div className="p-5 flex-1 flex flex-col">
-                  <div className="flex justify-between items-start gap-2 mb-2">
-                    <h3 className="text-[15px] font-semibold text-gray-800 leading-snug line-clamp-2">
-                      {item.name}
-                    </h3>
-                    <StatusBadge quantity={item.quantity ?? 0} />
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                    <Package size={14} className="shrink-0" />
-                    <span>{toTitleCase(item.category)}</span>
-                  </div>
-                  <p className="text-[13px] text-gray-600 mb-4">
-                    <strong className="text-gray-700">Available:</strong>{" "}
-                    {item.quantity ?? 0} {item.unit}
-                  </p>
-                </div>
-                <div className="p-4 pt-0 flex gap-2">
-                  <button
-                    onClick={() => openRestock(item)}
-                    className="flex-1 py-2 rounded-xl bg-[#0b347a] hover:bg-[#0a2a66] text-white text-sm font-medium transition shadow-sm"
-                  >
-                    Restock
-                  </button>
-                  <button
-                    onClick={() => openEdit(item)}
-                    className="px-3 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition shrink-0"
-                    title="Edit item"
-                  >
-                    <Edit3 size={14} />
-                  </button>
-                  <button
-                    onClick={() => openArchiveConfirm(item)}
-                    className="px-3 py-2 rounded-xl border border-amber-200 text-amber-700 hover:bg-amber-50 text-sm font-medium transition shrink-0"
-                    title="Archive item"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
+                {sortOrder === "asc" ? (
+                  <ChevronUp size={16} className="text-slate-500" />
+                ) : (
+                  <ChevronDown size={16} className="text-slate-500" />
+                )}
+                Qty: {sortOrder === "asc" ? "Low first" : "High first"}
+              </button>
+
+              <button
+                type="button"
+                onClick={openAdd}
+                className="ml-auto inline-flex items-center gap-2 rounded-xl bg-[#0a2a66] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#082554]"
+              >
+                <PlusCircle size={18} />
+                Add Item
+              </button>
             </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-end gap-2 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage <= 1}
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Prev
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage >= totalPages}
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </>
-        )}
-
-        {filtered.length === 0 && !loading && (
-          <div className="text-center py-16 px-4">
-            <Package className="mx-auto text-gray-300 mb-3" size={48} />
-            <p className="text-gray-500">No items found.</p>
-            <p className="text-sm text-gray-400 mt-1">
-              Try a different search or category.
-            </p>
           </div>
-        )}
+
+          {loading ? (
+            <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+              <Loader2 className="animate-spin text-[#0a2a66]" size={32} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
+              <div className="mb-4 rounded-full bg-slate-100 p-4">
+                <Package className="text-slate-400" size={40} />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-700">No items found</h3>
+              <p className="mt-1 text-sm text-slate-500">Try a different search term or category filter.</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-slate-600">
+                  Showing <span className="font-semibold text-slate-800">{showingFrom}</span>-<span className="font-semibold text-slate-800">{showingTo}</span> of <span className="font-semibold text-slate-800">{total}</span>
+                </p>
+                <p className="text-sm text-slate-600">
+                  Page <span className="font-semibold text-slate-800">{safePage}</span> of <span className="font-semibold text-slate-800">{totalPages}</span>
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {pagedFiltered.map((item) => (
+                  <div
+                    key={item._id}
+                    className="flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <div className="flex flex-1 flex-col p-5">
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-slate-800">{item.name}</h3>
+                        <StatusBadge quantity={item.quantity ?? 0} />
+                      </div>
+                      <div className="mb-1 flex items-center gap-2 text-sm text-slate-500">
+                        <Package size={14} className="shrink-0" />
+                        <span>{toTitleCase(item.category)}</span>
+                      </div>
+                      <p className="mb-4 text-[13px] text-slate-600">
+                        <strong className="text-slate-700">Available:</strong> {item.quantity ?? 0} {item.unit}
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2 p-4 pt-0">
+                      <button
+                        type="button"
+                        onClick={() => openRestock(item)}
+                        className="flex-1 rounded-xl bg-[#0b347a] py-2 text-sm font-medium text-white transition hover:bg-[#0a2a66]"
+                      >
+                        Restock
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(item)}
+                        className="shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        title="Edit item"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openArchiveConfirm(item)}
+                        className="shrink-0 rounded-xl border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50"
+                        title="Archive item"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-end">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage <= 1}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Prev
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage >= totalPages}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          </div>
 
         {/* Add Modal */}
         {showAdd && (
@@ -931,29 +947,42 @@ const SuperAdminManageInventory = () => {
 
         {/* Restock Modal */}
         {showRestock && selected && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold">Restock {selected.name}</h3>
-                <button onClick={() => setShowRestock(false)}>
-                  <XCircle />
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-gray-100 px-6 pb-2 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900">Restock {selected.name}</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowRestock(false)}
+                  className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                  aria-label="Close"
+                >
+                  <XCircle size={20} />
                 </button>
               </div>
-              <form onSubmit={handleRestock} className="space-y-3">
-                <label className="block text-sm">Add quantity</label>
+
+              <form onSubmit={handleRestock} className="space-y-5 p-6">
+                <label className="block text-sm font-medium text-gray-700">Add quantity</label>
                 <input
                   required
                   type="number"
                   min="1"
                   value={restockValue}
                   onChange={(e) => setRestockValue(e.target.value)}
-                  className="w-full border p-2 rounded"
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-[#0a2a66] focus:outline-none focus:ring-2 focus:ring-[#0a2a66]/20"
                 />
-                <div className="flex justify-end gap-2">
-                  <button type="button" onClick={() => setShowRestock(false)} className="px-4 py-2 rounded border">
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowRestock(false)}
+                    className="rounded-xl border border-gray-300 px-4 py-2.5 font-medium text-gray-700 transition hover:bg-gray-50"
+                  >
                     Cancel
                   </button>
-                  <button type="submit" className="px-4 py-2 rounded bg-[#0b347a] hover:bg-[#0a2a66] text-white">
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-[#0b347a] px-4 py-2.5 font-medium text-white transition hover:bg-[#0a2a66]"
+                  >
                     Restock
                   </button>
                 </div>
@@ -965,33 +994,46 @@ const SuperAdminManageInventory = () => {
         {/* Archive confirmation (replaces window.confirm) */}
         {archiveConfirm && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
             onClick={() => !archiving && setArchiveConfirm(null)}
             role="dialog"
             aria-modal="true"
             aria-labelledby="archive-item-dialog-title"
           >
             <div
-              className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-gray-100"
+              className="w-full max-w-md overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center justify-between border-b border-gray-100 px-6 pb-2 pt-6">
+                <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
                   <Archive size={24} />
                 </div>
-                <h2 id="archive-item-dialog-title" className="text-xl font-semibold text-gray-800">
+                <h2 id="archive-item-dialog-title" className="text-lg font-semibold text-gray-900">
                   Archive item?
                 </h2>
-              </div>
-              <p className="text-gray-600 text-sm mb-6">
-                Are you sure you want to archive <strong>{archiveConfirm.name}</strong>? It will not be visible here but can be restored from Archived Records.
-              </p>
-              <div className="flex gap-3 justify-end">
+                </div>
                 <button
                   type="button"
                   onClick={() => !archiving && setArchiveConfirm(null)}
                   disabled={archiving}
-                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+                  aria-label="Close"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-5 p-6">
+                <p className="text-sm text-gray-600">
+                  Are you sure you want to archive <strong>{archiveConfirm.name}</strong>? It will not be visible here but can be restored from Archived Records.
+                </p>
+                <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => !archiving && setArchiveConfirm(null)}
+                  disabled={archiving}
+                  className="rounded-xl border border-gray-300 px-4 py-2.5 font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -999,7 +1041,7 @@ const SuperAdminManageInventory = () => {
                   type="button"
                   onClick={handleArchiveConfirm}
                   disabled={archiving}
-                  className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 font-medium text-white transition hover:bg-amber-600 disabled:opacity-50"
                 >
                   {archiving ? (
                     <>
@@ -1010,6 +1052,7 @@ const SuperAdminManageInventory = () => {
                     "Archive"
                   )}
                 </button>
+                </div>
               </div>
             </div>
           </div>

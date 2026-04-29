@@ -97,7 +97,7 @@ body {
   }
 
   .settings-input {
-    @apply mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400;
+    @apply mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500;
     @apply focus:border-[color:var(--cot-primary)] focus:ring-4 focus:ring-[color:rgba(10,42,102,0.14)];
   }
 
@@ -105,11 +105,12 @@ body {
     @apply inline-flex w-full items-center justify-center gap-2 rounded-2xl py-3 font-semibold text-white shadow-sm transition;
     @apply bg-[color:var(--cot-primary)] hover:bg-[color:var(--cot-primary-hover)];
     @apply focus:outline-none focus:ring-4 focus:ring-[color:rgba(10,42,102,0.14)];
+    @apply disabled:cursor-not-allowed disabled:opacity-70;
   }
 
   .settings-icon-btn {
-    @apply absolute inset-y-0 right-2 my-1 inline-flex items-center justify-center rounded-xl px-2 text-slate-500 transition;
-    @apply hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-[color:rgba(10,42,102,0.25)];
+    @apply absolute inset-y-0 right-1 my-1 inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl px-2 text-slate-500 transition;
+    @apply hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-[color:rgba(10,42,102,0.35)];
   }
 }
 

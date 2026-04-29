@@ -16,6 +16,11 @@ export async function recordAudit(req, payload) {
     console.warn("auditLogService: missing action, skipping");
     return null;
   }
+
+  if (process.env.NODE_ENV === "test") {
+    return null;
+  }
+
   try {
     const timestamp = await getWorldTime();
     const log = await AuditLog.create({
@@ -46,4 +51,9 @@ export const AUDIT_ACTIONS = [
   "PROFILE_UPDATED",
   "ARCHIVE_USER",
   "UNARCHIVE_USER",
+  "REQUEST_SUBMITTED",
+  "REQUEST_APPROVED",
+  "REQUEST_REJECTED",
+  "REQUEST_AUTO_REJECTED",
+  "REQUEST_CANCELED",
 ];

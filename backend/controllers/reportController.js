@@ -17,6 +17,16 @@ const printer = new PdfPrinter({
 });
 
 const logoPath = path.resolve("./image/buksulogo.png");
+const APPROVED_STATUSES = ["Successful", "Approved"];
+const REJECTED_STATUSES = ["Rejected", "Unsuccessful"];
+const CANCELED_STATUSES = ["Canceled"];
+
+const normalizeStatus = (status) => {
+  if (APPROVED_STATUSES.includes(status)) return "Approved";
+  if (REJECTED_STATUSES.includes(status)) return "Rejected";
+  if (CANCELED_STATUSES.includes(status)) return "Canceled";
+  return status || "Unknown";
+};
 
 export const generateDepartmentReport = asyncHandler(async (req, res) => {
   const { department } = req.params;
@@ -38,25 +48,35 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
     throw new Error("No data found for this period.");
   }
 
-  // For this report, "transactions" means completed/posted issuances only.
-  const transactions = requests.filter((r) => r.status === "Successful");
-  if (transactions.length === 0) {
+  // Include finalized request outcomes in this report.
+  const reportableRequests = requests.filter(
+    (r) =>
+      APPROVED_STATUSES.includes(r.status) ||
+      REJECTED_STATUSES.includes(r.status) ||
+      CANCELED_STATUSES.includes(r.status)
+  );
+
+  if (reportableRequests.length === 0) {
     res.status(404);
-    throw new Error("No completed transactions found for this period.");
+    throw new Error("No approved, rejected, or canceled requests found for this period.");
   }
 
-  const totalTransactions = transactions.length;
-  const totalQtyIssued = transactions.reduce(
+  const approvedRequests = reportableRequests.filter((r) => APPROVED_STATUSES.includes(r.status));
+  const rejectedRequests = reportableRequests.filter((r) => REJECTED_STATUSES.includes(r.status));
+  const canceledRequests = reportableRequests.filter((r) => CANCELED_STATUSES.includes(r.status));
+
+  const totalTransactions = reportableRequests.length;
+  const totalQtyIssued = approvedRequests.reduce(
     (sum, r) => sum + (Number(r.quantity) || 0),
     0
   );
 
   const uniqueRequesters = new Set(
-    transactions.map((r) => r.requestedBy).filter(Boolean)
+    reportableRequests.map((r) => r.requestedBy).filter(Boolean)
   );
 
   const issuedByItem = {};
-  transactions.forEach((r) => {
+  approvedRequests.forEach((r) => {
     const item = r.itemName || "Unknown";
     issuedByItem[item] = (issuedByItem[item] || 0) + (Number(r.quantity) || 0);
   });
@@ -71,13 +91,15 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
   };
 
   // --- Scannable verification (QR + SHA-256 hash) ---
-  const fingerprintLines = transactions.map((r) => {
+  const fingerprintLines = reportableRequests.map((r) => {
     const id = String(r._id || "");
     const ts = new Date(r.requestedAt || r.createdAt || 0).toISOString();
     const by = String(r.requestedBy || "");
     const item = String(r.itemName || "");
     const qty = String(Number(r.quantity) || 0);
-    return `${id}|${ts}|${department}|${by}|${item}|${qty}`;
+    const status = String(normalizeStatus(r.status));
+    const reason = String(r.rejectionReason || "");
+    return `${id}|${ts}|${department}|${by}|${item}|${qty}|${status}|${reason}`;
   });
   const fingerprint = fingerprintLines.join("\n");
   const verificationHash = crypto
@@ -100,7 +122,10 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
       end: end.toISOString(),
     },
     totals: {
-      transactions: totalTransactions,
+      requests: totalTransactions,
+      approved: approvedRequests.length,
+      rejected: rejectedRequests.length,
+      canceled: canceledRequests.length,
       quantityIssued: totalQtyIssued,
     },
     generatedAt: now.toISOString(),
@@ -126,7 +151,10 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
   const summaryTableBody = [
     [{ text: "Metric", bold: true }, { text: "Value", bold: true }],
     ["Department", department],
-    ["Total transactions", String(totalTransactions)],
+    ["Total requests (approved/rejected/canceled)", String(totalTransactions)],
+    ["Approved", String(approvedRequests.length)],
+    ["Rejected", String(rejectedRequests.length)],
+    ["Canceled", String(canceledRequests.length)],
     ["Total quantity issued", String(totalQtyIssued)],
     ["Unique requesters", String(uniqueRequesters.size)],
   ];
@@ -150,7 +178,13 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
     ],
   ];
 
-  transactions.forEach((r) => {
+  reportableRequests.forEach((r) => {
+    const normalizedStatus = normalizeStatus(r.status);
+    let statusColor = "#334155";
+    if (normalizedStatus === "Approved") statusColor = "#047857";
+    if (normalizedStatus === "Rejected") statusColor = "#b91c1c";
+    if (normalizedStatus === "Canceled") statusColor = "#b45309";
+
     transactionsTableBody.push([
       { text: shortId(r._id), fontSize: 8 },
       { text: new Date(r.requestedAt || r.createdAt).toLocaleString("en-PH"), fontSize: 8 },
@@ -158,7 +192,14 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
       { text: r.requestedBy || "—", fontSize: 8 },
       { text: r.itemName || "—", fontSize: 8 },
       { text: String(r.quantity ?? "—"), fontSize: 8, alignment: "right" },
-      { text: "Posted", fontSize: 8, color: "#047857" },
+      {
+        text:
+          normalizedStatus === "Rejected" && r.rejectionReason
+            ? `${normalizedStatus}\n${r.rejectionReason}`
+            : normalizedStatus,
+        fontSize: 8,
+        color: statusColor,
+      },
     ]);
   });
 
@@ -316,7 +357,7 @@ export const generateDepartmentReport = asyncHandler(async (req, res) => {
         layout: "lightHorizontalLines",
       },
       {
-        text: "\nNotes:\n- This report includes completed/posted transactions only (stock issuances for this department).\n- Restocks and manual adjustments (if any) are tracked separately via inventory updates/system logs.",
+        text: "\nNotes:\n- This report includes approved, rejected, and canceled requests for the selected period.\n- Quantity issued reflects approved requests only (stock movements posted to inventory).\n- Restocks and manual adjustments (if any) are tracked separately via inventory updates/system logs.",
         fontSize: 9,
         color: "#444",
         margin: [0, 10, 0, 0],
