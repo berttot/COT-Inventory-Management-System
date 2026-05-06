@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import ReCAPTCHA from "react-google-recaptcha";
 import AuthShell from "../../components/AuthShell";
 import { cleanupRecaptcha } from "../../utils/cleanupRecaptcha";
@@ -18,6 +18,7 @@ function LoginPage() {
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false); //for toggle hide and show password
+  const location = useLocation();
 
   // ✅ Create a ref for reCAPTCHA
   const recaptchaRef = useRef(null);
@@ -25,6 +26,21 @@ function LoginPage() {
   useEffect(() => {
     cleanupRecaptcha(); // enable silent suppression
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("archived") === "1") {
+      setError("This account has been archived. Please contact an administrator.");
+    }
+  }, [location.search]);
+
+  const getLoginErrorMessage = (status, message) => {
+    if (status === 403 && /archived/i.test(message || "")) {
+      return "This account has been archived. Please contact an administrator.";
+    }
+
+    return message || "Login failed. Please try again.";
+  };
 
 
 
@@ -67,7 +83,7 @@ function LoginPage() {
     }
 
     if (!response.ok) {
-      setError(data.message || "Login failed. Please try again.");
+      setError(getLoginErrorMessage(response.status, data.message));
       return;
     }
 

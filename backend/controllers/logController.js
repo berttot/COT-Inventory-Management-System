@@ -3,7 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import QRCode from "qrcode";
 import AuditLog from "../models/AuditLog.js";
-import { getUserFromHeader } from "../utils/authUtils.js";
+import { getUserFromHeader, getUserFromToken } from "../utils/authUtils.js";
 import { recordAudit } from "../utils/auditLogService.js";
 import asyncHandler from "../middleware/asyncHandler.js";
 import PdfPrinter from "pdfmake";
@@ -36,12 +36,17 @@ export const createLog = asyncHandler(async (req, res) => {
 });
 
 export const createLogoutLog = asyncHandler(async (req, res) => {
-  const caller = (await getUserFromHeader(req)) || req.user;
-  const name = caller?.name || "Unknown";
-  const role = caller?.role || "unknown";
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const tokenFromBody = body.token;
+  const caller =
+    (await getUserFromHeader(req)) ||
+    (await getUserFromToken(tokenFromBody)) ||
+    req.user;
+  const name = caller?.name || body.userName || "Unknown";
+  const role = caller?.role || body.role || "unknown";
   const userId = caller?._id;
 
-  const customNote = req.body.details ? ` (${req.body.details})` : "";
+  const customNote = body.details ? ` (${body.details})` : "";
   const log = await recordAudit(req, {
     userId,
     name,

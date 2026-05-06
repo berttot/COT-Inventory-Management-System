@@ -1,11 +1,11 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
 // Global error handler for server-down scenarios
 import ServerErrorHandler from "./components/ServerErrorHandler";
 
 // Auth utilities
-import { isAuthenticated, getCurrentRole } from "./utils/auth";
+import { isAuthenticated, getCurrentRole, sendLogoutBeacon } from "./utils/auth";
 
 // Auth pages
 import LoginPage from "./pages/auth/LoginPage";
@@ -70,6 +70,67 @@ function ProtectedRoute({ element, allowedRoles }) {
 }
 
 function App() {
+  // Track if we're in the middle of internal navigation (within the app)
+  const navigationRef = React.useRef(false);
+
+  useEffect(() => {
+    // Detect internal link clicks (same origin navigation)
+    const handleLinkClick = (e) => {
+      const link = e.target.closest("a");
+      if (!link) return;
+
+      const href = link.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
+
+      try {
+        const linkUrl = new URL(href, window.location.origin);
+        // If it's the same origin, it's internal navigation
+        if (linkUrl.origin === window.location.origin) {
+          navigationRef.current = true;
+          // Reset after a short delay - gives beforeunload time to fire
+          setTimeout(() => {
+            navigationRef.current = false;
+          }, 100);
+        }
+      } catch {
+        // Invalid URL, ignore
+      }
+    };
+
+    // Detect back/forward navigation
+    const handlePopState = () => {
+      navigationRef.current = true;
+      setTimeout(() => {
+        navigationRef.current = false;
+      }, 100);
+    };
+
+    // Only send logout beacon if this is a true page exit (not internal navigation or refresh)
+    const handlePageExit = () => {
+      if (!isAuthenticated()) return;
+      // Skip logout logging if we're in the middle of internal navigation
+      if (navigationRef.current) return;
+
+      // Skip logout logging for page refresh (user stays in session)
+      const navEntries = performance.getEntriesByType("navigation");
+      if (navEntries.length > 0 && navEntries[0].type === "reload") {
+        return;
+      }
+
+      sendLogoutBeacon("Browser session ended via tab close");
+    };
+
+    document.addEventListener("click", handleLinkClick);
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("beforeunload", handlePageExit);
+
+    return () => {
+      document.removeEventListener("click", handleLinkClick);
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("beforeunload", handlePageExit);
+    };
+  }, []);
+
   return (
     <Router>
       <ServerErrorHandler />

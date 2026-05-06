@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import fetch from "node-fetch";
 import User from "../models/UserModel.js";
 import { recordAudit } from "../utils/auditLogService.js";
+import { getArchivedUserMessage, isArchivedUser } from "../utils/authUtils.js";
 import asyncHandler from "../middleware/asyncHandler.js";
 
 const verifyRecaptcha = async (token) => {
@@ -40,6 +41,11 @@ export const login = asyncHandler(async (req, res) => {
   if (!user) {
     res.status(400);
     throw new Error("User does not exist");
+  }
+
+  if (isArchivedUser(user)) {
+    res.status(403);
+    throw new Error(getArchivedUserMessage());
   }
 
   if (!user.password) {

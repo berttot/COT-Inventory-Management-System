@@ -40,6 +40,78 @@ export const getAuthToken = () => {
   return localStorage.getItem("token");
 };
 
+const LOGOUT_BEACON_DEDUPE_MS = 5000;
+const LOGOUT_BEACON_LAST_SENT_KEY = "logoutBeaconLastSentAt";
+
+const canSendLogoutBeacon = () => {
+  const lastSentRaw = sessionStorage.getItem(LOGOUT_BEACON_LAST_SENT_KEY);
+  const lastSent = Number(lastSentRaw || 0);
+  const now = Date.now();
+  if (now - lastSent < LOGOUT_BEACON_DEDUPE_MS) {
+    return false;
+  }
+  sessionStorage.setItem(LOGOUT_BEACON_LAST_SENT_KEY, String(now));
+  return true;
+};
+
+const buildLogoutExitPayload = (details) => {
+  return {
+    details,
+    token: localStorage.getItem("token") || "",
+    userName: localStorage.getItem("userName") || "",
+    role: localStorage.getItem("role") || "",
+    source: "beacon",
+  };
+};
+
+/**
+ * Best-effort logout log for unload scenarios (refresh/tab close)
+ * Uses navigator.sendBeacon so the browser can transmit during page teardown.
+ */
+export const sendLogoutBeacon = (
+  details = "Browser session ended (refresh/tab close)"
+) => {
+  if (typeof navigator === "undefined" || typeof window === "undefined") {
+    return false;
+  }
+
+  if (typeof navigator.sendBeacon !== "function") {
+    return false;
+  }
+
+  if (!canSendLogoutBeacon()) {
+    return false;
+  }
+
+  const payload = buildLogoutExitPayload(details);
+
+  try {
+    // Send explicit form content type so Express urlencoded parser can read it.
+    const encoded = new URLSearchParams(payload).toString();
+    const body = new Blob([encoded], {
+      type: "application/x-www-form-urlencoded;charset=UTF-8",
+    });
+    const ok = navigator.sendBeacon(`${API_URL}/logs/logout`, body);
+
+    // Fallback for browsers where beacon may be blocked in this context.
+    if (!ok && payload.token && typeof fetch === "function") {
+      fetch(`${API_URL}/logs/logout`, {
+        method: "POST",
+        keepalive: true,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${payload.token}`,
+        },
+        body: JSON.stringify({ details, source: "keepalive" }),
+      }).catch(() => {});
+    }
+
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Centralized logout function
  * Clears all auth data and optionally records logout on server

@@ -38,13 +38,11 @@ const isServerUnreachable = (error) => {
   return false;
 };
 
-/**
- * Checks if a response status indicates server is down
- */
-const isServerError = (status) => {
-  // 500+ errors might indicate server issues, but we'll be more conservative
-  // Only treat connection errors as "server down"
-  return status === 0 || status >= 500;
+const isArchivedSessionResponse = (response, payload) => {
+  if (response?.status !== 403) return false;
+
+  const message = `${payload?.message || ""} ${payload?.error || ""}`.toLowerCase();
+  return message.includes("archived") && message.includes("account");
 };
 
 /**
@@ -90,6 +88,24 @@ export const apiFetch = async (endpoint, options = {}) => {
 
   try {
     const response = await fetch(`${API_URL}${endpoint}`, fetchOptions);
+
+    let responsePayload = null;
+
+    if (!response.ok) {
+      try {
+        responsePayload = await response.clone().json();
+      } catch {
+        responsePayload = null;
+      }
+    }
+
+    if (isArchivedSessionResponse(response, responsePayload)) {
+      clearAuthData();
+      if (window.location.pathname !== "/") {
+        window.location.href = "/?archived=1";
+      }
+      throw new Error(responsePayload?.message || "This account has been archived.");
+    }
 
     // Check if server is unreachable (status 0 usually means network error)
     if (response.status === 0 || (!response.ok && response.status >= 500)) {

@@ -5,13 +5,15 @@ import {
   getLogs,
   getLogsPdf,
 } from "../controllers/logController.js";
-import { auth, requireSuperAdmin } from "../middleware/authMiddleware.js";
+import { auth, optionalAuth, requireSuperAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 // Write logs: authenticated users only (prevents spoofed entries)
 router.post("/", auth, createLog);
-router.post("/logout", auth, createLogoutLog);
+// Logout: use optional auth to handle interrupted connections gracefully
+// Records logout even if connection is severed before full authentication completes
+router.post("/logout", optionalAuth, createLogoutLog);
 
 // Read/export logs: Super Admin only
 router.get("/", auth, requireSuperAdmin, getLogs);
