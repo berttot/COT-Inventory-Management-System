@@ -25,3 +25,6 @@ The application supports three primary user roles with distinct responsibilities
 - **Frontend:** Copy `frontend/.env.example` to `frontend/.env` and fill in your values. Run `npm install` in `frontend/`.
 
 Never commit real `.env` files or share them—they contain secrets.
+
+
+<img width="1918" height="869" alt="Image" src="https://github.com/user-attachments/assets/a9703fbf-4a8c-4c31-a38d-f1824491875f" />
