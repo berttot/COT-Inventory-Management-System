@@ -39,3 +39,17 @@ Never commit real `.env` files or share them—they contain secrets.
 
 <img width="1911" height="872" alt="Image" src="https://github.com/user-attachments/assets/acbeba09-5d80-4f53-a0bf-3768e73178d1" />
 
+
+
+<img width="1911" height="862" alt="Image" src="https://github.com/user-attachments/assets/cc8f7fc5-b191-4740-a7dd-5374c4443023" />
+
+
+
+
+<img width="1906" height="873" alt="Image" src="https://github.com/user-attachments/assets/3aafeba0-249d-4265-8d52-2c5965d92b1e" />
+
+<img width="1903" height="867" alt="Image" src="https://github.com/user-attachments/assets/7268f14a-2b4b-4bf8-8146-6379661f5133" />
+
+
+<img width="1916" height="875" alt="Image" src="https://github.com/user-attachments/assets/6e71092d-39d5-451b-a198-b961b1ecc674" />
+
