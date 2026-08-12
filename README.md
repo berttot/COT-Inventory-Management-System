@@ -16,7 +16,7 @@ This system manages inventory items, tracks stock levels, handles item requests 
 The application supports three primary user roles with distinct responsibilities:
 
 - Superadmin: Full system owner with access to all settings, user management, system-wide reports, and the ability to seed or modify global data. Responsible for configuring departments and managing department admins.
-- Department Admin: Manages inventory and requests within a specific department. Can approve or reject staff requests, adjust stock for departmental items, and view departmental reports and logs.
+- Department Admin: Manages inventory and requests within a specific department. Can view departmental reports and logs.
 - Staff: Regular users who can browse available items, submit requests for needed supplies, and view the status of their requests.
 
 ## Setup
